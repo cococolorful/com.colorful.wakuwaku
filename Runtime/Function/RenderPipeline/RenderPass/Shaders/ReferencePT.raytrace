@@ -1,0 +1,4 @@
+#pragma enable_d3d11_debug_symbols
+#pragma max_recursion_depth 31
+#include"../ShaderLibrary/Renderer/RTGeneration.hlsl"
+

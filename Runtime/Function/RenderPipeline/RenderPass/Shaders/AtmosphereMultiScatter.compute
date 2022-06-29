@@ -1,0 +1,231 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel mutiScatterLutCS
+
+ #pragma enable_d3d11_debug_symbols
+#include"../ShaderLibrary/AtmosphereCommon.hlsl"
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWTexture2D<float4> MutiScatteringLut;
+Texture2D<float4> TransmittanceLut;
+int RayMatchSample;
+float3 TerrainAlbedo;
+float3 SunIntensity;
+
+struct SingleScatteringResult
+{
+    float3 L; // Scattered light (luminance)
+    float3 OpticalDepth; // Optical depth (1/m)
+    float3 Transmittance; // Transmittance in [0,1] (unitless)
+    float3 MultiScatAs1;
+
+    float3 NewMultiScatStep0Out;
+    float3 NewMultiScatStep1Out;
+};
+
+SingleScatteringResult IntegrateScatteredLuminance(
+	in float3 P, in float3 WorldDir, in AtmosphereParameters atmosphere,in float3 toSunDir,
+	in float SampleCountIni, in float tMaxMax = 9000000.0f)
+{
+    SingleScatteringResult result = (SingleScatteringResult) 0;
+    
+    float3 earthO = float3(0.0f, 0.0f, 0.0f);
+    float tBottom = raySphereIntersectNearest(P, WorldDir, earthO, atmosphere.bottomRadius);
+    float tTop = raySphereIntersectNearest(P, WorldDir, earthO, atmosphere.topRadius);
+    float tMax = 0.0f;
+    if (tBottom < 0.0f)
+    {
+        if (tTop < 0.0f)
+        {
+            tMax = 0.0f; // No intersection with earth nor atmosphere: stop right away  
+            return result;
+        }
+        else
+        {
+            tMax = tTop;
+        }
+    }
+    else
+    {
+        if (tTop > 0.0f)
+        {
+            tMax = min(tTop, tBottom);
+        }
+    }
+    tMax = min(tMax, tMaxMax);
+    
+    float dq = tMax / float(SampleCountIni);
+    float3 opticalDepth = float3(0, 0, 0);
+    float3 f_ms = float3(0, 0, 0);
+    float3 g_2 = float3(0, 0, 0);
+    for (int i = 0; i < SampleCountIni; i++)
+    {
+        float3 Q = P + i * dq * WorldDir;
+        float3 sigmaS, sigmaT;
+        GetSigmaST(Q, atmosphere, sigmaS, sigmaT);
+        
+        const float3 SampleOpticalDepth = sigmaT * dq;
+        opticalDepth += SampleOpticalDepth;
+        
+        const float3 transPQ = exp(-opticalDepth);
+        const float3 commonPart = transPQ * sigmaS * dq;
+        f_ms += commonPart;
+        
+        float lengthQ = length(Q);
+        float3 transmit2Sun;
+        {
+            float3 UpVector = Q / lengthQ;
+            float mu = dot(UpVector, toSunDir);
+            transmit2Sun = GetTransmittance(atmosphere, TransmittanceLut, length(Q), mu);
+        } 
+        g_2 += commonPart * transmit2Sun * evalPhaseFunction(lengthQ - atmosphere.bottomRadius, dot(WorldDir, toSunDir), atmosphere);
+
+    }
+    float3 transmittance = exp(-opticalDepth);
+    
+    result.NewMultiScatStep0Out = f_ms;
+    result.NewMultiScatStep1Out = g_2;
+    
+    result.OpticalDepth = opticalDepth;
+    return result;
+}
+
+groupshared float3 MultiScatAs1SharedMem[64];
+groupshared float3 LSharedMem[64];
+#define SqrtSampleCount 8
+[numthreads(1, 1, SqrtSampleCount * SqrtSampleCount)]
+void mutiScatterLutCS(uint3 id : SV_DispatchThreadID)
+{
+    int width, height;
+    MutiScatteringLut.GetDimensions(width, height);
+    
+    float2 pixPos = float2(id.xy) + 0.5f;
+    float2 uv = pixPos / float2(width,height);
+    
+    uv = float2(fromSubUvsToUnit(uv.x, width), fromSubUvsToUnit(uv.y, height));
+    
+    AtmosphereParameters atmosphere = GetAtmosphereParameters();
+    float viewHeight = lerp(atmosphere.bottomRadius, atmosphere.topRadius, uv.y);
+    float cosZenithAngle = (uv.x * 2.0 - 1.0);
+    float3 sunDir = float3( sqrt(saturate(1.0 - cosZenithAngle * cosZenithAngle)), cosZenithAngle,0);
+    
+    float3 WorldPos = float3(0.0f, viewHeight,0.0f);
+    float3 WorldDir = float3(0.0f, 1.0f, 0.0f);
+    
+    float3 f_ms = float3(0, 0, 0);
+    float3 g_2 = float3(0, 0, 0);
+    
+    const float sqrtSampleCount = SqrtSampleCount;
+    float i = 0.5f + float(id.z / SqrtSampleCount);
+    float j = 0.5f + float(id.z - float((id.z / SqrtSampleCount) * SqrtSampleCount));
+    {
+        float randA = i / sqrtSampleCount;
+        float randB = j / sqrtSampleCount;
+        
+        float theta = 2.0f * PI * randA;
+        float phi = acos(1.0f - 2.0f * randB); // uniform distribution https://mathworld.wolfram.com/SpherePointPicking.html
+		//phi = PI * randB;						// bad non uniform
+        float cosPhi = cos(phi);
+        float sinPhi = sin(phi);
+        float cosTheta = cos(theta);
+        float sinTheta = sin(theta);
+        
+        WorldDir.x = cosTheta * sinPhi;
+        WorldDir.y = sinTheta * sinPhi;
+        WorldDir.z = cosPhi;
+        
+        
+
+        //bool hitGround = RayIntersectsGround(atmosphere, viewHeight, cosZenithAngle);
+        //float d = hitGround ? DistanceToBottomAtmosphereBoundary(atmosphere, viewHeight, cosZenithAngle) : DistanceToTopAtmosphereBoundary(atmosphere, viewHeight, cosZenithAngle);
+        //
+        //
+        //float dq = d / float(RayMatchSample);
+        //
+        //float3 transPQ = float3(1, 1, 1);
+        //for (int i = 0; i < RayMatchSample;i ++)
+        //{
+        //    float3 q = WorldPos + dq*i * WorldDir;
+        //    float h = length(q) - atmosphere.bottomRadius;
+        //    float3 rho = evalPhaseFunction(h, dot(WorldDir, sunDir), atmosphere);
+        //    
+        //    float3 sigmaS, sigmaT;
+        //    GetSigmaST(h, atmosphere, sigmaS, sigmaT);
+        //    transPQ *= exp(-sigmaT * dq);
+        //    
+        //    f_ms += transPQ * sigmaS * dq;
+        //    
+        //    float qHeight = length(q);
+        //    const float3 UpVector = q / qHeight;
+        //    float SunZenithCosAngle = dot(sunDir, UpVector);
+        //    float3 transmittanToSun = GetTransmittance(atmosphere, TransmittanceLut, qHeight, SunZenithCosAngle);
+        //    g_2 += transPQ * sigmaS * transmittanToSun * rho * 1 * SunIntensity * dq;
+        //}
+        //
+        //
+        //if(hitGround)
+        //{
+        //    float3 transmittanToSun = GetTransmittance(atmosphere, TransmittanceLut,0, cosZenithAngle);
+        //    g_2 += transPQ * transmittanToSun * cosZenithAngle *
+        //         SunIntensity * (TerrainAlbedo / PI);
+        //}
+    }
+    
+    SingleScatteringResult result = IntegrateScatteredLuminance(WorldPos, WorldDir, atmosphere, sunDir, RayMatchSample);
+    MultiScatAs1SharedMem[id.z] = result.NewMultiScatStep0Out/ 64;
+    LSharedMem[id.z] = result.NewMultiScatStep1Out/ 64;
+    
+    GroupMemoryBarrierWithGroupSync();
+
+	// 64 to 32
+    if (id.z < 32)
+    {
+        MultiScatAs1SharedMem[id.z] += MultiScatAs1SharedMem[id.z + 32];
+        LSharedMem[id.z] += LSharedMem[id.z + 32];
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+	// 32 to 16
+    if (id.z < 16)
+    {
+        MultiScatAs1SharedMem[id.z] += MultiScatAs1SharedMem[id.z + 16];
+        LSharedMem[id.z] += LSharedMem[id.z + 16];
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+	// 16 to 8 (16 is thread group min hardware size with intel, no sync required from there)
+    if (id.z < 8)
+    {
+        MultiScatAs1SharedMem[id.z] += MultiScatAs1SharedMem[id.z + 8];
+        LSharedMem[id.z] += LSharedMem[id.z + 8];
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (id.z < 4)
+    {
+        MultiScatAs1SharedMem[id.z] += MultiScatAs1SharedMem[id.z + 4];
+        LSharedMem[id.z] += LSharedMem[id.z + 4];
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (id.z < 2)
+    {
+        MultiScatAs1SharedMem[id.z] += MultiScatAs1SharedMem[id.z + 2];
+        LSharedMem[id.z] += LSharedMem[id.z + 2];
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (id.z < 1)
+    {
+        MultiScatAs1SharedMem[id.z] += MultiScatAs1SharedMem[id.z + 1];
+        LSharedMem[id.z] += LSharedMem[id.z + 1];
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (id.z > 0)
+        return;
+
+    float3 MultiScatAs1 = MultiScatAs1SharedMem[0] ; // Equation 7 f_ms
+    float3 InScatteredLuminance = LSharedMem[0] ; // Equation 5 L_2ndOrder
+
+    const float3 r = MultiScatAs1;
+    const float3 SumOfAllMultiScatteringEventsContribution = 1.0f / (1.0 - r);
+    float3 L = InScatteredLuminance * SumOfAllMultiScatteringEventsContribution; // Equation 10 Psi_ms
+   
+    MutiScatteringLut[id.xy] = float4(L, 1.0f);
+}

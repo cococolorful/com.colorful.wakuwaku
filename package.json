@@ -1,0 +1,10 @@
+{
+  "name": "com.colorful.wakuwaku",
+  "displayName": "wakuwaku",
+  "version": "0.1.0",
+  "unity": "2022.2",
+  "description": "wakuwaku is the ultimate plugin for learning rendering based on Scriptable Render Pipeline (SRP)",
+  "dependencies": {
+    "com.unity.render-pipelines.core": "14.0.2"
+  }
+}

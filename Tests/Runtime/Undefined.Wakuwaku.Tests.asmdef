@@ -1,0 +1,11 @@
+{
+    "name": "Undefined.Wakuwaku.Tests",
+    "references": [
+        "Undefined.Wakuwaku"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

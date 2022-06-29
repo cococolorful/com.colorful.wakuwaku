@@ -1,0 +1,14 @@
+{
+    "name": "Undefined.Wakuwaku.Editor.Tests",
+    "references": [
+        "Undefined.Wakuwaku.Editor",
+        "Undefined.Wakuwaku"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": []
+}

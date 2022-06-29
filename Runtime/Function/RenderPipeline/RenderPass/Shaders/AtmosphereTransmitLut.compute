@@ -1,0 +1,220 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel AtmosphereTransmittanceLut
+ #pragma enable_d3d11_debug_symbols
+#include"../ShaderLibrary/AtmosphereCommon.hlsl"
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+Texture2D<float4> TransmittanceLut;
+RWTexture2D<float4> Output;
+
+int RayMatchSample;
+
+
+struct SingleScatteringResult
+{
+    float3 L; // Scattered light (luminance)
+    float3 OpticalDepth; // Optical depth (1/m)
+    float3 Transmittance; // Transmittance in [0,1] (unitless)
+    float3 MultiScatAs1;
+
+    float3 NewMultiScatStep0Out;
+    float3 NewMultiScatStep1Out;
+};
+
+
+SingleScatteringResult IntegrateScatteredLuminance(
+	in float3 P, in float3 WorldDir, in AtmosphereParameters atmosphere, in float3 toSunDir,
+	in float SampleCountIni, in float tMaxMax = 9000000.0f)
+{
+    SingleScatteringResult result = (SingleScatteringResult) 0;
+    
+    float3 earthO = float3(0.0f, 0.0f, 0.0f);
+    float tBottom = raySphereIntersectNearest(P, WorldDir, earthO, atmosphere.bottomRadius);
+    float tTop = raySphereIntersectNearest(P, WorldDir, earthO, atmosphere.topRadius);
+    float tMax = 0.0f;
+    if (tBottom < 0.0f)
+    {
+        if (tTop < 0.0f)
+        {
+            tMax = 0.0f; // No intersection with earth nor atmosphere: stop right away  
+            return result;
+        }
+        else
+        {
+            tMax = tTop;
+        }
+    }
+    else
+    {
+        if (tTop > 0.0f)
+        {
+            tMax = min(tTop, tBottom);
+        }
+    }
+    tMax = min(tMax, tMaxMax);
+    
+    float dq = tMax / float(SampleCountIni);
+    float3 opticalDepth = float3(0, 0, 0);
+    float3 f_ms = float3(0, 0, 0);
+    float3 g_2 = float3(0, 0, 0);
+    for (int i = 0; i < SampleCountIni; i++)
+    {
+        float3 Q = P + i * dq * WorldDir;
+        float3 sigmaS, sigmaT;
+        GetSigmaST(Q, atmosphere, sigmaS, sigmaT);
+        
+        const float3 SampleOpticalDepth = sigmaT * dq;
+        opticalDepth += SampleOpticalDepth;
+        
+        const float3 transPQ = exp(-opticalDepth);
+        const float3 commonPart = transPQ * sigmaS * dq;
+        f_ms += commonPart;
+        
+        float lengthQ = length(Q);
+        float3 transmit2Sun;
+        {
+            float3 UpVector = Q / lengthQ;
+            float mu = dot(UpVector, toSunDir);
+            transmit2Sun = GetTransmittance(atmosphere, TransmittanceLut, length(Q), mu);
+        }
+        g_2 += commonPart * transmit2Sun * evalPhaseFunction(lengthQ - atmosphere.bottomRadius, dot(WorldDir, toSunDir), atmosphere);
+
+    }
+    float3 transmittance = exp(-opticalDepth);
+    
+    result.NewMultiScatStep0Out = f_ms;
+    result.NewMultiScatStep1Out = g_2;
+    
+    result.OpticalDepth = opticalDepth;
+    return result;
+}
+
+	
+//        float pHeight = length(P);
+//        const float3 UpVector = P / pHeight;
+//        float SunZenithCosAngle = dot(SunDir, UpVector);
+//        float2 uv;
+//        GetTransmittanceTextureUVFromRMu(Atmosphere, pHeight, SunZenithCosAngle, uv);
+//        float3 TransmittanceToSun = TransmittanceLut.SampleLevel(my_point_clamp_sampler, uv, 0).rgb;
+//
+//        float3 PhaseTimesScattering;
+//        if (MieRayPhase)
+//        {
+//            PhaseTimesScattering = medium.scatteringMie * MiePhaseValue + medium.scatteringRay * RayleighPhaseValue;
+//        }
+//        else
+//        {
+//            PhaseTimesScattering = medium.scattering * uniformPhase;
+//        }
+//
+//		// Earth shadow 
+//        float tEarth = raySphereIntersectNearest(P, SunDir, earthO + PLANET_RADIUS_OFFSET * UpVector, Atmosphere.BottomRadius);
+//        float earthShadow = tEarth >= 0.0f ? 0.0f : 1.0f;
+//
+//		// Dual scattering for multi scattering 
+//
+//        float3 multiScatteredLuminance = 0.0f;
+//#if MULTISCATAPPROX_ENABLED
+//		multiScatteredLuminance = GetMultipleScattering(Atmosphere, medium.scattering, medium.extinction, P, SunZenithCosAngle);
+//#endif
+//
+//        float shadow = 1.0f;
+//#if SHADOWMAP_ENABLED
+//		// First evaluate opaque shadow
+//		shadow = getShadow(Atmosphere, P);
+//#endif
+//
+//        float3 S = globalL * (earthShadow * shadow * TransmittanceToSun * PhaseTimesScattering + multiScatteredLuminance * medium.scattering);
+//
+//		// When using the power serie to accumulate all sattering order, serie r must be <1 for a serie to converge.
+//		// Under extreme coefficient, MultiScatAs1 can grow larger and thus result in broken visuals.
+//		// The way to fix that is to use a proper analytical integration as proposed in slide 28 of http://www.frostbite.com/2015/08/physically-based-unified-volumetric-rendering-in-frostbite/
+//		// However, it is possible to disable as it can also work using simple power serie sum unroll up to 5th order. The rest of the orders has a really low contribution.
+//#define MULTI_SCATTERING_POWER_SERIE 1
+//
+//#if MULTI_SCATTERING_POWER_SERIE==0
+//		// 1 is the integration of luminance over the 4pi of a sphere, and assuming an isotropic phase function of 1.0/(4*PI)
+//		result.MultiScatAs1 += throughput * medium.scattering * 1 * dt;
+//#else
+//        float3 MS = medium.scattering * 1;
+//        float3 MSint = (MS - MS * SampleTransmittance) / medium.extinction;
+//        result.MultiScatAs1 += throughput * MSint;
+//#endif
+//
+//		// Evaluate input to multi scattering 
+//		{
+//            float3 newMS;
+//
+//            newMS = earthShadow * TransmittanceToSun * medium.scattering * uniformPhase * 1;
+//            result.NewMultiScatStep0Out += throughput * (newMS - newMS * SampleTransmittance) / medium.extinction;
+//			//	result.NewMultiScatStep0Out += SampleTransmittance * throughput * newMS * dt;
+//
+//            newMS = medium.scattering * uniformPhase * multiScatteredLuminance;
+//            result.NewMultiScatStep1Out += throughput * (newMS - newMS * SampleTransmittance) / medium.extinction;
+//			//	result.NewMultiScatStep1Out += SampleTransmittance * throughput * newMS * dt;
+//        }
+//
+//#if 0
+//		L += throughput * S * dt;
+//		throughput *= SampleTransmittance;
+//#else
+//		// See slide 28 at http://www.frostbite.com/2015/08/physically-based-unified-volumetric-rendering-in-frostbite/ 
+//        float3 Sint = (S - S * SampleTransmittance) / medium.extinction; // integrate along the current step segment 
+//        L += throughput * Sint; // accumulate and also take into account the transmittance from previous steps
+//        throughput *= SampleTransmittance;
+//#endif
+//
+//        tPrev = t;
+//    }
+//
+//    if (ground && tMax == tBottom && tBottom > 0.0)
+//    {
+//		// Account for bounced light off the earth
+//        float3 P = WorldPos + tBottom * WorldDir;
+//        float pHeight = length(P);
+//
+//        const float3 UpVector = P / pHeight;
+//        float SunZenithCosAngle = dot(SunDir, UpVector);
+//        float2 uv;
+//        LutTransmittanceParamsToUv(Atmosphere, pHeight, SunZenithCosAngle, uv);
+//        float3 TransmittanceToSun = TransmittanceLutTexture.SampleLevel(samplerLinearClamp, uv, 0).rgb;
+//
+//        const float NdotL = saturate(dot(normalize(UpVector), normalize(SunDir)));
+//        L += globalL * TransmittanceToSun * throughput * NdotL * Atmosphere.GroundAlbedo / PI;
+//    }
+
+       
+//        return result;
+//    }
+//}
+
+
+[numthreads(8,8,1)]
+void AtmosphereTransmittanceLut(uint3 id : SV_DispatchThreadID)
+{
+    int width, height;
+    Output.GetDimensions(width, height);
+    
+    float2 pixPos = float2(id.xy) + 0.5f;
+    float2 uv = pixPos / float2(width, height);
+    
+    AtmosphereParameters atmosphere = GetAtmosphereParameters();
+
+    float viewHeight, viewZenithCosAngle;
+    GetTransmittanceTextureRMuFromUV(atmosphere, uv, viewHeight, viewZenithCosAngle);
+    
+    
+	//  A few extra needed constants
+    float3 WorldPos = float3(0.0f, viewHeight,0.0f);
+    float3 WorldDir = float3(sqrt(1.0 - viewZenithCosAngle * viewZenithCosAngle), viewZenithCosAngle,0);
+
+    const bool ground = false;
+    const float SampleCountIni = RayMatchSample ; // Can go a low as 10 sample but energy lost starts to be visible.
+    const float DepthBufferValue = -1.0;
+    const bool VariableSampleCount = false;
+    const bool MieRayPhase = false;
+    float3 transmittance = exp(-IntegrateScatteredLuminance(WorldPos, WorldDir, atmosphere, float3(0, 0, 0),SampleCountIni).OpticalDepth);
+
+    
+    Output[id.xy] = float4(transmittance, 1.0f);
+}

@@ -19,7 +19,7 @@ namespace wakuwaku.Function.WRenderPipeline
         public ComputeBuffer sky_box_sampling_prob_;
         public ComputeBuffer sky_box_sampling_alias_;
 
-
+        
         public ComputeShader transmitLutCS;
         public ComputeShader bitonicSort;
 
@@ -31,7 +31,7 @@ namespace wakuwaku.Function.WRenderPipeline
         protected override RenderPipeline CreatePipeline()
         {
             Debug.Log("Create Pipeline");
-            RenderSceneManager.Initialize();
+            Scene.Instance.BuildScene();
 
             if (Shader.GetGlobalTexture("g_sky_box") == null && sky_box_tex != null)
             {
@@ -42,7 +42,7 @@ namespace wakuwaku.Function.WRenderPipeline
 
         private void OnDisable()
         {
-            RenderSceneManager.Clear();
+            //Scene.Clear();
             Debug.Log("OnDisable Pipeline");
         }
 
@@ -75,14 +75,13 @@ namespace wakuwaku.Function.WRenderPipeline
         {
             WRenderPipeline.context = context;
 
-
-
-
             CommandBuffer commandBuffer = new CommandBuffer();
 
             BeginFrameRendering(context, cameras);
             foreach (var camera in cameras)
             {
+                //Scene.Instance.ApplyCamera(camera);
+                
                 WRenderGraph rg = GetCameraRenderGraph(camera);
 
                 BeginCameraRendering(context, camera);

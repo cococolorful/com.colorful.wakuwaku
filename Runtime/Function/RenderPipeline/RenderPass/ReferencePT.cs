@@ -70,7 +70,7 @@ namespace wakuwaku.Function.WRenderPipeline
             cmd.SetRandomWriteTarget(1, RTAccumulation);
             cmd.SetRayTracingTextureParam(ReferenceShader, "_Accumulation", RTAccumulation);
             
-            cmd.SetRayTracingAccelerationStructure(ReferenceShader, "_SceneBVH", RenderSceneManager.Instance.SceneBVH);
+            cmd.SetRayTracingAccelerationStructure(ReferenceShader, "_SceneBVH", Scene.Instance.SceneBVH);
             cmd.SetRayTracingTextureParam(ReferenceShader, "_RenderTarget", RTOutput);
             
             cmd.SetRayTracingShaderPass(ReferenceShader, "PathTracing");

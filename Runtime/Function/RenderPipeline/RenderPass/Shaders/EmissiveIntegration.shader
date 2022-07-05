@@ -19,7 +19,6 @@ Shader"wakuwaku/EmissiveIntegration"
             #pragma target 5.0
             #pragma enable_d3d11_debug_symbols
 
-            
             struct appdata
             {
                 float3 vertex : POSITION;

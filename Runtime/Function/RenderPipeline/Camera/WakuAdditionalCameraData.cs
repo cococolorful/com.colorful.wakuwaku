@@ -4,6 +4,7 @@ using UnityEngine;
 
 namespace wakuwaku.Function.WRenderPipeline
 {
+    [ExecuteAlways]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Camera))]
     public class WakuAdditionalCameraData : MonoBehaviour
@@ -17,6 +18,12 @@ namespace wakuwaku.Function.WRenderPipeline
             m_camera = GetComponent<Camera>();
         }
 
+        private void OnGUI()
+        {
+            GUILayout.BeginHorizontal();
+            
+            GUILayout.EndHorizontal();
+        }
         // Update is called once per frame
         void Update()
         {

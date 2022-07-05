@@ -1,5 +1,6 @@
 #ifndef DEFAULTVS_HLSL
 #define DEFAULTVS_HLSL
+#include"Scene.hlsl"
 
 #include"Input.hlsl"
 struct VertexIn

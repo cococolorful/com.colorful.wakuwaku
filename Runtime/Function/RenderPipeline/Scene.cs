@@ -65,25 +65,275 @@ namespace wakuwaku.Function.WRenderPipeline
             public int ID;
         } 
     }
-    public class RenderSceneManager
+    public class Scene
     {
-        public static RenderSceneManager Instance {get { if (instance == null) Initialize(); return instance; }}
-        static RenderSceneManager instance;
+        public static Scene Instance {get { if (instance == null) Initialize(); return instance; }}
+        static Scene instance;
         public  static void Initialize()
         {
             Debug.Log("RenderSceneManager Initialize");
-            Material s;
             
-            instance = new RenderSceneManager();
+            instance = new Scene();
+            //BuildScene();
         }
 
-        public RenderSceneManager()
+        
+        public void BuildScene()
         {
+            CollectSceneData();
+            CreateRasterMesh();
+        }
+        public Scene()
+        {
+
+            //if(Application.isPlaying)
+            //{
+            //    CollectSceneData();
+            //    //CreateMeshGroup();
+            //    //CreateMeshInstanceData();
+            //    CreateRasterMesh();
+            //}
             BuildMeshBVH();
 
             BuildLight();
         }
-        ~RenderSceneManager()
+
+        struct MeshInstance
+        {
+            public int instace_id;
+            public int material_id;
+            
+            public int vbuffer_offset;
+            public int ibuffer_offset;
+        }
+
+        private void CreateMeshInstanceData()
+        {
+            throw new NotImplementedException();
+        }
+
+        struct MeshGroup
+        {
+            public List<MeshDescriptor> non_instanced_meshes;
+            public List<MeshDescriptor> instanced_meshes;
+        }
+
+        private void CreateMeshGroup()
+        {
+            // non-instanced meshes are all placed in the same group
+            // instanced mesh has one group per mesh
+            // m_mesh_instances = null;
+            //throw new NotImplementedException();
+        }
+
+        class SceneData
+        {
+            // Raytracing
+            public RayTracingAccelerationStructure scene_bvh;
+
+            // Instance transforms
+            public ComputeBuffer world_matrices;
+            public List<Matrix4x4> world_mat_cpu;
+            
+            public ComputeBuffer inverse_transpose_world_matrices;
+            public List<Matrix4x4> inverse_transpose_world_mat_cpu;
+
+            public ComputeBuffer prev_world_matrices;
+            public ComputeBuffer inverse_transpose_prev_world_matrices;
+
+            // Instance
+
+
+            // Camera
+            public Matrix4x4 camera_view_matrix;
+            public Matrix4x4 camera_prev_view_matrix;
+            public Matrix4x4 camera_proj_matrix;
+            public Matrix4x4 camera_view_proj_matrix;
+            public Matrix4x4 camera_inv_view_proj_matrix;
+            public Matrix4x4 camera_view_proj_no_jitter_matrix;
+            public Matrix4x4 camera_prev_view_proj_no_jitter_matrix;
+            public Matrix4x4 camera_proj_no_jitter_matrix;
+
+            public Vector3 camera_pos_world;
+
+            public void Apply()
+            {
+                Shader.SetGlobalBuffer("g_scene_world_matrices", world_matrices);
+                Shader.SetGlobalBuffer("g_scene_inverse_transpose_world_matrices", inverse_transpose_world_matrices);
+
+                Shader.SetGlobalMatrix("g_camera_view_proj_matrix", camera_view_proj_matrix);
+
+            }
+
+            ~SceneData()
+            {
+                if(world_matrices !=null)
+                    world_matrices.Dispose();
+                if (inverse_transpose_world_matrices != null)
+                    inverse_transpose_world_matrices.Dispose();
+            }
+        }
+
+        public void ApplyCamera(Camera camera)
+        {
+            m_scene_gpu_data.camera_view_matrix = camera.worldToCameraMatrix;
+            m_scene_gpu_data.camera_view_proj_matrix = camera.worldToCameraMatrix * camera.projectionMatrix;
+
+            m_scene_gpu_data.camera_pos_world = camera.transform.position;
+
+            m_scene_gpu_data.Apply();
+        }
+        SceneData m_scene_gpu_data;
+        public class MeshDescriptor
+        {
+            public Mesh mesh;
+            public List<GameObject> instances;
+            public uint base_vertex_location;
+            public uint start_index_location;
+        }
+        public List<MeshDescriptor> m_mesh_instances;
+
+        public class MeshInstanceData
+        {
+            public int mesh_id;
+            public int material_id;
+            public int instance_id;
+            public Material material;
+            public MeshRenderer renderer;
+        }
+        public List<MeshInstanceData> InstancesData;
+
+        List<Material> m_materials;
+        Dictionary<Material, int> m_material2id;
+        // how many mesh and how many instance and how many material and how many light
+
+        public Mesh m_raster_mesh;
+
+        void CreateRasterMesh()
+        {
+            m_raster_mesh = new Mesh();
+            m_raster_mesh.name = "Raster Scene Mesh";
+            
+            List<Vector3> vertices = new List<Vector3>();
+            List<Vector3> normals = new List<Vector3>();
+            List<Vector4> tangents= new List<Vector4>();
+            List<Vector2> uvs = new List<Vector2>();
+            List<int> indices = new List<int>();
+
+            for (int i = 0; i < m_mesh_instances.Count; i++)
+            {
+                m_mesh_instances[i].base_vertex_location = (uint)vertices.Count;
+                vertices.AddRange(m_mesh_instances[i].mesh.vertices);
+                normals.AddRange(m_mesh_instances[i].mesh.normals);
+                tangents.AddRange(m_mesh_instances[i].mesh.tangents);
+                uvs.AddRange(m_mesh_instances[i].mesh.uv);
+
+                m_mesh_instances[i].start_index_location = (uint)indices.Count;
+                indices.AddRange(m_mesh_instances[i].mesh.triangles);
+
+            }
+
+            m_raster_mesh.SetVertices(vertices);
+            m_raster_mesh.SetNormals(normals);
+            m_raster_mesh.SetUVs(0,uvs);
+            m_raster_mesh.SetTangents(tangents);
+            m_raster_mesh.SetTriangles(indices,0);
+            m_raster_mesh.RecalculateBounds();
+            //m_raster_mesh.UploadMeshData(true);
+
+            commandData = new GraphicsBuffer.IndirectDrawIndexedArgs[m_draw_count];
+            uint instance_id = 0;
+            foreach (var item in m_mesh_instances)
+            {
+                foreach (var instance in item.instances)
+                {
+                    commandData[instance_id].instanceCount = 1;
+                    commandData[instance_id].indexCountPerInstance = (uint)item.mesh.GetIndexCount(0);
+                    commandData[instance_id].startIndex = (uint)item.start_index_location;
+                    commandData[instance_id].baseVertexIndex = (uint)item.base_vertex_location;
+                    commandData[instance_id].startInstance = (uint)instance_id;
+                    ++instance_id;
+                }
+            }
+            
+            if (commandBuf != null)
+                commandBuf.Dispose();
+            commandBuf = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, m_draw_count, GraphicsBuffer.IndirectDrawIndexedArgs.size);
+            commandBuf.SetData(commandData);
+        }
+        private void CollectSceneData()
+        {
+            m_mesh_instances = new List<MeshDescriptor>();
+            m_material2id = new Dictionary<Material, int>();
+            m_materials = new List<Material>();
+
+            Dictionary<Mesh, int> mesh2mesh_desc_id = new Dictionary<Mesh, int>();
+            foreach (var item in GameObject.FindObjectsOfType<MeshRendererAdditionalData>())
+            {
+                if (item.gameObject.activeInHierarchy == false)
+                    continue;
+                
+                if(mesh2mesh_desc_id.TryGetValue(item.GetComponent<MeshFilter>().sharedMesh,out var idx) == false)
+                {
+                    idx = m_mesh_instances.Count;
+                    mesh2mesh_desc_id.Add(item.GetComponent<MeshFilter>().sharedMesh, idx);
+                    m_mesh_instances.Add(new MeshDescriptor() { instances = new List<GameObject>() ,mesh = item.GetComponent<MeshFilter>().sharedMesh });
+                }
+                m_mesh_instances[idx].instances.Add(item.gameObject);
+
+                var material = item.GetComponent<MeshRenderer>().sharedMaterial;
+                if (m_material2id.ContainsKey(material) == false)
+                {
+                    m_material2id.Add(material, m_materials.Count);
+                    m_materials.Add(material);
+                }
+            }
+
+            InstancesData = new List<MeshInstanceData>();
+
+            // instance data
+            m_draw_count = 0;
+            foreach (var item in m_mesh_instances)
+            {
+                foreach (var instance in item.instances)
+                {
+                    InstancesData.Add(new MeshInstanceData()
+                    {
+                        instance_id = m_draw_count,
+                        material_id = m_material2id[instance.GetComponent<MeshRenderer>().sharedMaterial],
+                        material = instance.GetComponent<MeshRenderer>().sharedMaterial,
+                         renderer = instance.GetComponent<MeshRenderer>(),
+                    });
+                    ++m_draw_count;
+                }
+            }
+        
+
+            m_scene_gpu_data = new SceneData();
+            m_scene_gpu_data.world_mat_cpu = new List<Matrix4x4>();
+            m_scene_gpu_data.inverse_transpose_world_mat_cpu = new List<Matrix4x4>();
+
+            
+            foreach (var item in m_mesh_instances)
+            {
+                foreach (var instance in item.instances)
+                {
+                    m_scene_gpu_data.world_mat_cpu.Add(instance.transform.localToWorldMatrix);
+                    m_scene_gpu_data.inverse_transpose_world_mat_cpu.Add(instance.transform.worldToLocalMatrix.transpose);
+                    
+                }
+            }
+            unsafe
+            {
+                m_scene_gpu_data.world_matrices = new ComputeBuffer(m_scene_gpu_data.world_mat_cpu.Count, sizeof(Matrix4x4));
+                m_scene_gpu_data.world_matrices.SetData(m_scene_gpu_data.world_mat_cpu);
+
+                m_scene_gpu_data.inverse_transpose_world_matrices = new ComputeBuffer(m_scene_gpu_data.inverse_transpose_world_mat_cpu.Count, sizeof(Matrix4x4));
+                m_scene_gpu_data.inverse_transpose_world_matrices.SetData(m_scene_gpu_data.inverse_transpose_world_mat_cpu);
+            }
+        }
+
+        ~Scene()
         {
             _SceneBVH.Dispose();
             _SceneBVH = null;
@@ -92,6 +342,20 @@ namespace wakuwaku.Function.WRenderPipeline
             compressed_vertex_buffer_GPU.Dispose();
             compressed_to_world_buffer_GPU.Dispose();
             light_buffer_GPU.Dispose();
+        }
+
+        public GraphicsBuffer commandBuf;
+        GraphicsBuffer.IndirectDrawIndexedArgs[] commandData;
+        int m_draw_count;
+
+        public void Rasterize(Material material)
+        {
+            m_scene_gpu_data.Apply();
+            RenderParams rp = new RenderParams(material);
+            rp.worldBounds = new Bounds(Vector3.zero, new Vector3(1000, 1000, 1000));
+
+            Graphics.RenderMeshIndirect(rp, m_raster_mesh, commandBuf, m_draw_count);
+            
         }
         public void BuildLight()
         {
@@ -118,7 +382,6 @@ namespace wakuwaku.Function.WRenderPipeline
             Debug.Log("Ray Tracing BVH finish");
         }
         
-
         public void IntegrateEmissiveTriangles()
         {
             /// <summary>

@@ -15,7 +15,7 @@ struct GBuffer
     float4 motionVecFwidth : SV_Target6;
 };
 
-    // See Material.h for channel layout
+// See Material.h for channel layout
 Texture2D _BaseColorTex;
 Texture2D _MetallicRoughnessTexture;
 Texture2D _EmissiveTex;
@@ -117,7 +117,7 @@ GBuffer GBufferPS(VertexOut vsOut)
     gBufOut.wsPos = float4(hitPt.posW, 1.f);
     gBufOut.wsNorm = float4(hitPt.N, length(hitPt.posW - _CameraPosW));
     gBufOut.matDif = float4(hitPt.diffuse, 1);
-    gBufOut.matSpec = float4(hitPt.specular, hitPt.linearRoughness);
+    gBufOut.matSpec = float4(instanceID / 6.0f, 0,0,1);
     gBufOut.matEmissive = float4(hitPt.emissive, 0.f);
     //gBufOut.matDif = _BaseColorFactor;
     int2 ipos = int2(vsOut.PosH.xy);

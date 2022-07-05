@@ -68,7 +68,7 @@ namespace wakuwaku.Function.WRenderPipeline
         {
             if (this.transform.worldToLocalMatrix != mPrevious)
             {
-                RenderSceneManager.Instance.BuildLight();
+                Scene.Instance.BuildLight();
                 ReferencePT.reset = true;
             }
             mPrevious = this.transform.worldToLocalMatrix;

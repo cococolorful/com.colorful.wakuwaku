@@ -12,116 +12,101 @@ namespace wakuwaku.Function.WRenderPipeline
     public class GBufferTest : IRenderPass<GBufferTest>
     {
         [PortPin(PinType.Write)]
-        public TextureHandle RTOutput;
+        public TextureHandle depthBuffer;
+        [PortPin(PinType.Write)]
+        public TextureHandle gBufferWSPos; // lit from environment
+        [PortPin(PinType.Write)]
+        public TextureHandle gBufferWSNorm;
+        [PortPin(PinType.Write)]
+        public TextureHandle gBufferMatDif;
+        [PortPin(PinType.Write)]
+        public TextureHandle gBufferMatSpec;
+        [PortPin(PinType.Write)]
+        public TextureHandle gBufferLinearZAndNormal;
+        [PortPin(PinType.Write)]
+        public TextureHandle gBufferMotionVecFwidth;
 
-        public RenderTexture RTAccumulation;
-
-        public int MaxBounces = 32;
-
-        public RayTracingShader ReferenceShader;
-        private int _AccumulatedFrames = 1;
-        public int MaxAccumulatedFrames = 1024;
-        Matrix4x4 _InvCameraViewProj;
-        Vector3 _CamPosW;
-        static public bool reset =  false;
         
-        private Camera _Cam;
 
-        void CreatePTSpectrum(int width, int height)
-        {
-            
-            try
-            {
-                RTAccumulation = RenderTexture.GetTemporary(width,height,0,GraphicsFormat.R32G32B32A32_SFloat);
-                RTAccumulation.enableRandomWrite = true;
-                RTAccumulation.name = "RTAccumulation";
-            }
-            catch(System.Exception e)
-            {
-                Debug.LogException(e);
-            }
-
-        }
-        void  OnSize(int width, int height)
-        {
-            RenderTexture.ReleaseTemporary(RTAccumulation);
-            CreatePTSpectrum(width, height);
-
-        }
-
+        Material material;
         protected override void Execute(
             RenderGraphContext ctx)
         {
-            if (Input.GetMouseButton(1))
-                reset = true;
+
             var cmd = ctx.cmd;
-            if (reset)
-            {
-                reset = false;
-                _AccumulatedFrames = 1;
-            }
 
-            RenderTexture s = RTOutput;
 
-            if (s.width != RTAccumulation.width || s.height != RTAccumulation.height)
-            {
-                OnSize(s.width, s.height);
-            }
-            cmd.SetRandomWriteTarget(1, RTAccumulation);
-            cmd.SetRayTracingTextureParam(ReferenceShader, "_Accumulation", RTAccumulation);
-            
-            cmd.SetRayTracingAccelerationStructure(ReferenceShader, "_SceneBVH", RenderSceneManager.Instance.SceneBVH);
-            cmd.SetRayTracingTextureParam(ReferenceShader, "_RenderTarget", RTOutput);
-            
-            cmd.SetRayTracingShaderPass(ReferenceShader, "PathTracing");
-            cmd.SetRayTracingIntParam(ReferenceShader, "_TemporalSeed", Random.Range(0,int.MaxValue));
-
-            cmd.SetRayTracingIntParam(ReferenceShader, "_MaxBounces", MaxBounces);
-            
-            cmd.SetRayTracingIntParam(ReferenceShader, "g_max_accumulated_frames", MaxAccumulatedFrames>0? MaxAccumulatedFrames:int.MaxValue);
-            cmd.SetRayTracingIntParam(ReferenceShader, "_AccumulatedFrames", _AccumulatedFrames ++);
-            cmd.SetRayTracingMatrixParam(ReferenceShader, "_InvCameraViewProj", _InvCameraViewProj);
-            cmd.SetRayTracingVectorParam(ReferenceShader, "_CamPosW", _CamPosW);
-
-            //cmd.DrawMeshInstancedIndirect()
-            cmd.DispatchRays(ReferenceShader, "VisibleRayGen", (uint)s.width, (uint)s.height, 1);
-            
+            cmd.SetRenderTarget(new RenderTargetIdentifier[] {
+                            gBufferWSPos,
+                            gBufferWSNorm,
+                            gBufferMatDif,
+                            gBufferMatSpec ,
+                            gBufferLinearZAndNormal,
+                            gBufferMotionVecFwidth}, depthBuffer);
+            cmd.ClearRenderTarget(true, true, Color.black);
+            var passId = new ShaderTagId(nameof(GBufferPass));
+            //cmd.RasterizeScene(0);
+            //cmd.DrawMeshInstancedIndirect(,,,,,)
+            //Scene.Instance.Rasterize(material);
             
         }
         protected override void AllocateWriteResource(Camera camera, ScriptableRenderContext context, RenderPipelineAsset asset)
         {
+            material = new Material(Shader.Find("wakuwaku/Hidden/GBufferRaster"));
 
-            if (_Cam != camera)
+
+            gBufferWSNorm = CreateTexture
+               (new TextureDesc(camera.pixelWidth, camera.pixelHeight)
+               {
+                   colorFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.R32G32B32A32_SFloat,
+                   name = "gBufferWSNorm",
+                   clearBuffer = true,
+                   clearColor = Color.clear
+               });
+            gBufferWSPos = CreateTexture(new TextureDesc(camera.pixelWidth, camera.pixelHeight)
             {
-                _Cam = camera;
-                reset = true;
-                Dispose();
-            }
-
-            _InvCameraViewProj = GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix  ;
-            _InvCameraViewProj = _InvCameraViewProj.inverse;
-
-            _CamPosW = camera.transform.position;
-            // SceneSize = new Vector2(camera.pixelWidth, camera.pixelHeight);
-            RTOutput = CreateTexture
-                (new TextureDesc(camera.pixelWidth, camera.pixelHeight)
-                {
-                    colorFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm,
-                    name = "RTOutput",
-                    clearBuffer = false,
-                    clearColor = Color.clear,
-                    enableRandomWrite = true,
-                });
-            
-            
-            if(RTAccumulation == null)
+                colorFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.R32G32B32A32_SFloat,
+                name = "gBufferWSPos",
+                clearBuffer = true,
+                clearColor = Color.black
+            });
+            gBufferMatDif = CreateTexture(new TextureDesc(camera.pixelWidth, camera.pixelHeight)
             {
-                CreatePTSpectrum(camera.pixelWidth, camera.pixelHeight);
-            }
+                colorFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.R32G32B32A32_SFloat,
+                name = "gBufferMatDif",
+                clearBuffer = true,
+                clearColor = Color.clear
+            });
+            gBufferMatSpec = CreateTexture(new TextureDesc(camera.pixelWidth, camera.pixelHeight)
+            {
+                colorFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.R32G32B32A32_SFloat,
+                name = "gBufferMatSpec",
+                clearBuffer = true,
+                clearColor = Color.clear
+            });
+            gBufferLinearZAndNormal = CreateTexture(new TextureDesc(camera.pixelWidth, camera.pixelHeight)
+            {
+                colorFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.R32G32B32A32_SFloat,
+                name = "gBufferLinearZAndNormal",
+                clearBuffer = true,
+                clearColor = Color.clear
+            });
+            gBufferMotionVecFwidth = CreateTexture(new TextureDesc(camera.pixelWidth, camera.pixelHeight)
+            {
+                colorFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.R32G32B32A32_SFloat,
+                name = "gBufferMotionVecFwidth",
+                clearBuffer = true,
+                clearColor = Color.clear
+            });
+            depthBuffer = CreateTexture(new TextureDesc(camera.pixelWidth, camera.pixelHeight)
+            {
+                depthBufferBits = DepthBits.Depth32,
+                name = "depthBuffer",
+                clearBuffer = true,
+            });
         }
         public void Dispose()
         {
-            RenderTexture.ReleaseTemporary(RTAccumulation);
 
         }
     }

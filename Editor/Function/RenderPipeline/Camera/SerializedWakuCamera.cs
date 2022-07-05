@@ -38,6 +38,7 @@ namespace wakuwaku.Function.WRenderPipeline
             serializedAdditionalDataObject = new SerializedObject(additional_camera_data);
 
             render_graph = serializedAdditionalDataObject.Find((WakuAdditionalCameraData d) => d.render_graph);
+
         }
         public void Apply()
         {

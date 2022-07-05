@@ -58,7 +58,8 @@ namespace wakuwaku.Function.WRenderPipeline
             cmd.SetGlobalMatrix("_Last_PV_NoJitter", previousViewProjectionMatrix);
             cmd.SetViewProjectionMatrices(view, proj);
             //cmd.DrawProcedural(Matrix4x4.identity, skyBox, 0, MeshTopology.Triangles, 36);
-
+            //cmd.RasterizeScene("GBufferPass");
+            //cmd.DrawRenderer()
             cmd.DrawRendererList(rendererList);
         }
         protected override void AllocateWriteResource(Camera camera, ScriptableRenderContext context, RenderPipelineAsset asset)

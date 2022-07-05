@@ -33,8 +33,8 @@ namespace wakuwaku.Function.WRenderPipeline
         // Update is called once per frame
         void Update()
         {
-            if(RenderSceneManager.Instance != null)
-                RenderSceneManager.Instance.SceneBVH.UpdateInstanceTransform(mesh_renderer_);
+            if(Scene.Instance != null)
+                Scene.Instance.SceneBVH.UpdateInstanceTransform(mesh_renderer_);
         }
     }
 

@@ -3,7 +3,7 @@ the ultimate plugin for learning rendering based on Scriptable Render Pipeline (
 
 ## TODO
 ### Tool
-- [x] GLTF importer
+- [x] GLTF importer(with/without submesh)
 - [x] Render Graph GUI 
 ### Material
 - [x] Metal-roughness workflow 

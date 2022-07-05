@@ -12,8 +12,9 @@ using UnityEditor.AssetImporters;
 namespace wakuwaku.Resource.GLTF
 {
     [ScriptedImporter(1,"gltf")]
-    public class GLTFImporterView : ScriptedImporter
+    public class GLTFImporter : ScriptedImporter
     {
+        public bool WithoutSubmesh = false;
         public override void OnImportAsset(AssetImportContext ctx)
         {
             string filepath = ctx.assetPath;
@@ -36,8 +37,8 @@ namespace wakuwaku.Resource.GLTF
                 var imageRes = GLTFImage.Import(s.images, directoryRoot, bufferViewRes);
                 var textureRes = GLTFTexture.Import(s.textures, imageRes);
                 var materialRes = GLTFMaterial.Import(s.materials, textureRes);
-                var meshRes = GLTFMesh.Import(s.meshes, accessorRes, materialRes);
-                var nodeRes = GLTFNode.Import(s.nodes, meshRes,s.extensions, gltfScene);
+                var meshRes = GLTFMesh.Import(s.meshes, accessorRes, materialRes, WithoutSubmesh);
+                var nodeRes = GLTFNode.Import(s.nodes, meshRes,s.extensions, gltfScene, WithoutSubmesh);
                 // Save asset
                 SaveToAsset(gltfScene, ctx);
             }

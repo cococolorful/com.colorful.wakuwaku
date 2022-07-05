@@ -45,7 +45,7 @@ namespace wakuwaku.Resource.GLTF
             
             public Transform transform;
         }
-        public static ImportResult[] Import(List<GLTFNode>  gLTFNodes, GLTFMesh.ImportResult[]  meshes,GLTFExtension gLTFExtensions,GameObject root)
+        public static ImportResult[] Import(List<GLTFNode>  gLTFNodes, GLTFMesh.ImportResult[]  meshes,GLTFExtension gLTFExtensions,GameObject root,bool without_submesh)
         {
             List<ImportResult> results = new List<ImportResult>(gLTFNodes.Count);
             for (int i = 0; i < gLTFNodes.Count; i++)
@@ -64,9 +64,12 @@ namespace wakuwaku.Resource.GLTF
                     new Quaternion(gLTFNodes[i].rotation[0], gLTFNodes[i].rotation[1], gLTFNodes[i].rotation[2], gLTFNodes[i].rotation[3]));
 
                 results[i].transform.gameObject.name = gLTFNodes[i].name;
+                if (results[i].transform.gameObject.name == "")
+                    results[i].transform.gameObject.name = "wakuwaku" + results[i].transform.GetInstanceID();
+
                 if (gLTFNodes[i].mesh != -1)
                 {
-                    if (meshes[gLTFNodes[i].mesh].materials.Length > 1) // exist submesh,split it to child node
+                    if (meshes[gLTFNodes[i].mesh].materials.Length > 1 && without_submesh) // exist submesh,split it to child node
                     {
 
                         List<int> children;
@@ -98,12 +101,10 @@ namespace wakuwaku.Resource.GLTF
                         mf.sharedMesh = meshes[gLTFNodes[i].mesh].mesh[0];
 
                         MeshRenderer mr = results[i].transform.gameObject.AddComponent<MeshRenderer>();
-                        mr.sharedMaterial = meshes[gLTFNodes[i].mesh].materials[0];
+                        mr.sharedMaterials = meshes[gLTFNodes[i].mesh].materials;
 
                         results[i].transform.gameObject.AddComponent<MeshRendererAdditionalData>();
                     }
-
-
                 }
 
                 if(gLTFNodes[i].extensions != null &&

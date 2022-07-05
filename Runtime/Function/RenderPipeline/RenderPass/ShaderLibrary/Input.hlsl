@@ -17,7 +17,7 @@ cbuffer UnityPerCamera
     
     float3 _CameraPosW;
 }
-
+int instanceID;
 inline float4x4 GetCameraView()
 {
     return unity_MatrixV;

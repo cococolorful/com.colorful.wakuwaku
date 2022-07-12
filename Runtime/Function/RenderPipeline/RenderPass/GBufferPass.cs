@@ -1,4 +1,6 @@
 ﻿
+using System;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering.RenderGraphModule;
 using UnityEngine.Rendering;
@@ -33,8 +35,9 @@ namespace wakuwaku.Function.WRenderPipeline
         {
             a, b, c, d
         }
-
-        public float a = 1;
+        public int a2 = 1;
+        public int a1 = 1;
+        public int a = 1;
         public bool b = false;
         public Vector2 c = new Vector2(1.10973f, 2.0f);
         public E d = E.d;
@@ -42,9 +45,27 @@ namespace wakuwaku.Function.WRenderPipeline
         public Color f = new Color(1, 2, 3, 0.22334f);
 
         private Matrix4x4 view, proj, previousViewProjectionMatrix;
+
+        [DllImport("NativeRenderer")]
+        private static extern IntPtr GetRenderEventAndDataFunc();
+        [DllImport("NativeRenderer")]
+        private static extern IntPtr GetRenderEventFunc();
+
+        [DllImport("NativeRenderer")]
+        private static extern int Sum(int a,int b);
+        [DllImport("NativeRenderer")]
+        private static extern void RegisterLog(Log log);
+
+        delegate void Log(string info);
+
+        void LogInfo(string info)
+        {
+            Debug.Log(info);
+        }
         protected override void Execute(
             RenderGraphContext ctx)
         {
+            RegisterLog(LogInfo);
             var cmd = ctx.cmd;
             cmd.SetRenderTarget(new RenderTargetIdentifier[] {
                             gBufferWSPos,
@@ -60,6 +81,10 @@ namespace wakuwaku.Function.WRenderPipeline
             //cmd.DrawProcedural(Matrix4x4.identity, skyBox, 0, MeshTopology.Triangles, 36);
             //cmd.RasterizeScene("GBufferPass");
             //cmd.DrawRenderer()
+            Debug.Log(Sum(a1, a2));
+            IntPtr p = new IntPtr(a);
+            //cmd.IssuePluginEventAndData(GetRenderEventAndDataFunc(),1,p);
+            cmd.IssuePluginEvent(GetRenderEventFunc(), 1);
             cmd.DrawRendererList(rendererList);
         }
         protected override void AllocateWriteResource(Camera camera, ScriptableRenderContext context, RenderPipelineAsset asset)

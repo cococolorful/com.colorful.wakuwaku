@@ -1,18 +1,22 @@
 ﻿#ifndef RAY_TRACING_HLSL
 #define RAY_TRACING_HLSL
 
+#define RAYTRACING
 #include "RTCommon.hlsl"
 #include "Sensors/PinholeCamera.hlsl"
 #include "Integrators/PathTracer.hlsl"
 #include "SceneData.hlsl"
 #include "SceneUtil.hlsl"
-
+#include "../../ShaderLibrary/Scene.hlsl"
 #include"Util/Spectrum.hlsl"
 
 inline RayDesc GeneratePrimaryRay(inout RandomSequence rndSequence)
 {
     float2 pixel = float2(DispatchRaysIndex().xy);
     float2 resolutions = float2(DispatchRaysDimensions().xy);
+    
+    Camera cam;
+    return cam.ComputeRayPinhole(pixel, resolutions, true);
     
     float2 offset = RandomSequence_GenerateSample2D(rndSequence);
     pixel += lerp(-0.5.xx, 0.5.xx, offset);

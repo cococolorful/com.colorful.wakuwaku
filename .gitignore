@@ -3,3 +3,5 @@
 ################################################################################
 
 /Runtime/Function/NativeRenderingPlugin/.vs
+/Runtime/Function/NativeRenderingPlugin/out
+/Runtime/Function/NativeRenderingPlugin/bin

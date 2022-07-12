@@ -29,7 +29,7 @@ Spectrum  PathIntegrator_Li(in RayDesc ray, inout RandomSequence rndSequence, in
         {
             if (payload.IsMiss())
             {
-            Spectrum Le = EnvironmentLe(ray.Direction);
+                float3 Le = EnvironmentLe(ray.Direction);
                 if (bounce == 0)
                     radiance += throughput * Le;
                 else

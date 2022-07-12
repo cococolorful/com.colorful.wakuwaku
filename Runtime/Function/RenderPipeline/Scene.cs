@@ -154,8 +154,17 @@ namespace wakuwaku.Function.WRenderPipeline
             public Matrix4x4 camera_prev_view_proj_no_jitter_matrix;
             public Matrix4x4 camera_proj_no_jitter_matrix;
 
-            public Vector3 camera_pos_world;
+            public Vector3 g_camera_pos_world;
+            public float g_camera_near_z;
 
+            public Vector3 g_camera_right;
+            public float g_camera_jitter_x;
+
+            public Vector3 g_camera_up;
+            public float g_camera_jitter_y;
+
+            public Vector3 g_camera_forward;
+            public float g_camera_far_z;
             public void Apply()
             {
                 Shader.SetGlobalBuffer("g_scene_world_matrices", world_matrices);
@@ -163,6 +172,12 @@ namespace wakuwaku.Function.WRenderPipeline
 
                 Shader.SetGlobalMatrix("g_camera_view_proj_matrix", camera_view_proj_matrix);
 
+                Shader.SetGlobalVector("g_camera_pos_world", g_camera_pos_world);
+                Shader.SetGlobalVector("g_camera_right", g_camera_right);
+                Shader.SetGlobalVector("g_camera_up", g_camera_up);
+                Shader.SetGlobalVector("g_camera_forward", g_camera_forward);
+                Shader.SetGlobalFloat("g_camera_near_z", g_camera_near_z); 
+                Shader.SetGlobalFloat("g_camera_far_z", g_camera_far_z);
             }
 
             ~SceneData()
@@ -179,8 +194,22 @@ namespace wakuwaku.Function.WRenderPipeline
             m_scene_gpu_data.camera_view_matrix = camera.worldToCameraMatrix;
             m_scene_gpu_data.camera_view_proj_matrix = camera.worldToCameraMatrix * camera.projectionMatrix;
 
-            m_scene_gpu_data.camera_pos_world = camera.transform.position;
 
+//             var p1 = camera.ViewportToWorldPoint(new Vector3(0, 0, camera.nearClipPlane));
+//             var p2= camera.ViewportToWorldPoint(new Vector3(0, 1, camera.nearClipPlane));
+//             var p3 = camera.ViewportToWorldPoint(new Vector3(1, 1, camera.nearClipPlane));
+// 
+//             var right = (p2 - p1).normalized;
+//             var up = (p3 - p2).normalized;
+//             var forward = camera.transform.forward;
+
+            m_scene_gpu_data.g_camera_forward = camera.transform.forward;
+            m_scene_gpu_data.g_camera_right = camera.transform.right;
+            m_scene_gpu_data.g_camera_up = camera.transform.up;
+
+            m_scene_gpu_data.g_camera_near_z = camera.nearClipPlane;
+            m_scene_gpu_data.g_camera_far_z = camera.farClipPlane;
+            m_scene_gpu_data.g_camera_pos_world = camera.transform.position;
             m_scene_gpu_data.Apply();
         }
         SceneData m_scene_gpu_data;
@@ -326,6 +355,7 @@ namespace wakuwaku.Function.WRenderPipeline
             unsafe
             {
                 m_scene_gpu_data.world_matrices = new ComputeBuffer(m_scene_gpu_data.world_mat_cpu.Count, sizeof(Matrix4x4));
+
                 m_scene_gpu_data.world_matrices.SetData(m_scene_gpu_data.world_mat_cpu);
 
                 m_scene_gpu_data.inverse_transpose_world_matrices = new ComputeBuffer(m_scene_gpu_data.inverse_transpose_world_mat_cpu.Count, sizeof(Matrix4x4));

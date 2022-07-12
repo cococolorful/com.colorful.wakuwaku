@@ -1,45 +1,11 @@
 #ifndef SCENE_HLSL
 #define SCENE_HLSL
 
+#include"../ShaderLibrary/Camera.hlsl"
 
-////////////////////
-/// Data Input
-////////////////////
-//cbuffer CameraData
-//{
-//    float4x4 _InvCameraViewProj;
-//    float3 _CamPosW;
-//    float _CamPad0;
-//};
-cbuffer CameraData
-{
-    float4x4 g_camera_view_matrix;
-    float4x4 g_camera_prev_view_matrix;
-    float4x4 g_camera_proj_matrix;
-    float4x4 g_camera_view_proj_matrix;
-    float4x4 g_camera_inv_view_proj_matrix;
-    float4x4 g_camera_view_proj_no_jitter_matrix;
-    float4x4 g_camera_prev_view_proj_no_jitter_matrix;
-    float4x4 g_proj_no_jitter_matrix;
-
-    float3 g_camera_pos_world;
-     
-}
-
-struct Camera
-{
-    float3 GetPosition()
-    {
-        return g_camera_pos_world;
-    }
-
-    float4x4 GetViewProj()
-    {
-        return g_camera_view_proj_matrix;
-    }
-};
-
-//RaytracingAccelerationStructure g_scene_bvh;
+#ifdef RAYTRACING
+    RaytracingAccelerationStructure g_scene_bvh;
+#endif 
 
 StructuredBuffer<float4x4> g_scene_world_matrices;
 StructuredBuffer<float4x4> g_scene_inverse_transpose_world_matrices;

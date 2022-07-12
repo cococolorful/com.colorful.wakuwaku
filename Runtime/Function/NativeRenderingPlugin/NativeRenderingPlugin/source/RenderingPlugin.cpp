@@ -8,7 +8,6 @@
 #include <vector>
 
 
-
 // --------------------------------------------------------------------------
 // SetTimeFromUnity, an example function we export which is called by one of the scripts.
 
@@ -107,17 +106,7 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
 	s_Graphics->UnregisterDeviceEventCallback(OnGraphicsDeviceEvent);
 }
 
-#if UNITY_WEBGL
-typedef void	(UNITY_INTERFACE_API * PluginLoadFunc)(IUnityInterfaces* unityInterfaces);
-typedef void	(UNITY_INTERFACE_API * PluginUnloadFunc)();
 
-extern "C" void	UnityRegisterRenderingPlugin(PluginLoadFunc loadPlugin, PluginUnloadFunc unloadPlugin);
-
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API RegisterPlugin()
-{
-	UnityRegisterRenderingPlugin(UnityPluginLoad, UnityPluginUnload);
-}
-#endif
 
 // --------------------------------------------------------------------------
 // GraphicsDeviceEvent
@@ -289,62 +278,13 @@ static void UNITY_INTERFACE_API OnRenderEvent(int eventID)
 	ModifyTexturePixels();
 	ModifyVertexBuffer();
 }
-#include "RenderAPI.h"
-#include "PlatformBase.h"
 
-#include <cmath>
 
-// Direct3D 12 implementation of RenderAPI.
-
-typedef void (UNITY_INTERFACE_API* LogFunc)(char* info);
-
-LogFunc log_func;
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API RegisterLog(LogFunc log)
-{
-	log_func = log;
-}
-#include <assert.h>
-#include <d3d12.h>
-#include "Unity/IUnityGraphicsD3D12.h"
-#include <utility>
-#include<string>
-static void UNITY_INTERFACE_API OnRenderEventAndDate(int eventId, void* data)
-{
-	try
-	{
-		auto i = static_cast<int*>(data);
-		*i = *i + 1;
-	}
-	catch (const std::exception& e )
-	{
-		OutputDebugStringA("Error in  OnRenderEventAndDate .\n");
-	}
-	//int a = 1;
-	//try
-	//{
-	//	auto i = static_cast<int*>(data);
-	//	*i = *i + 1;
-	//}
-	//catch ()
-	//{
-	//}
-}
-
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API   Sum(int a, int b)
-{
-	auto str = std::to_string(a) + "By Me";
-	log_func(str.data());
-	return a + b+1024;
-}
 // --------------------------------------------------------------------------
 // GetRenderEventFunc, an example function we export which is used to get a rendering event callback function.
 
 extern "C" UnityRenderingEvent UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderEventFunc()
 {
 	return OnRenderEvent;
-}
-extern "C" UnityRenderingEventAndData UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderEventAndDataFunc()
-{
-	return OnRenderEventAndDate;
 }
 

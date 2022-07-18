@@ -53,10 +53,7 @@ namespace wakuwaku.Function.WRenderPipeline
 
         [DllImport("NativeRenderer")]
         private static extern int Sum(int a,int b);
-        [DllImport("NativeRenderer")]
-        private static extern void RegisterLog(Log log);
-
-        delegate void Log(string info);
+        
 
         void LogInfo(string info)
         {
@@ -65,7 +62,6 @@ namespace wakuwaku.Function.WRenderPipeline
         protected override void Execute(
             RenderGraphContext ctx)
         {
-            RegisterLog(LogInfo);
             var cmd = ctx.cmd;
             cmd.SetRenderTarget(new RenderTargetIdentifier[] {
                             gBufferWSPos,
@@ -81,10 +77,8 @@ namespace wakuwaku.Function.WRenderPipeline
             //cmd.DrawProcedural(Matrix4x4.identity, skyBox, 0, MeshTopology.Triangles, 36);
             //cmd.RasterizeScene("GBufferPass");
             //cmd.DrawRenderer()
-            Debug.Log(Sum(a1, a2));
-            IntPtr p = new IntPtr(a);
             //cmd.IssuePluginEventAndData(GetRenderEventAndDataFunc(),1,p);
-            cmd.IssuePluginEvent(GetRenderEventFunc(), 1);
+            //cmd.IssuePluginEvent(GetRenderEventFunc(), 1);
             cmd.DrawRendererList(rendererList);
         }
         protected override void AllocateWriteResource(Camera camera, ScriptableRenderContext context, RenderPipelineAsset asset)

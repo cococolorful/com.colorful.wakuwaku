@@ -309,7 +309,7 @@ namespace wakuwaku.Function.WRenderPipeline
                     m_mesh_instances.Add(new MeshDescriptor() { instances = new List<GameObject>() ,mesh = item.GetComponent<MeshFilter>().sharedMesh });
                 }
                 m_mesh_instances[idx].instances.Add(item.gameObject);
-
+                
                 var material = item.GetComponent<MeshRenderer>().sharedMaterial;
                 if (m_material2id.ContainsKey(material) == false)
                 {

@@ -4,6 +4,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using System.Runtime.InteropServices;
 
 namespace wakuwaku.Function.WRenderPipeline
 {
@@ -30,6 +31,7 @@ namespace wakuwaku.Function.WRenderPipeline
         public Material BlitMat;
         protected override RenderPipeline CreatePipeline()
         {
+            InitializeNaivePlugin();
             Debug.Log("Create Pipeline");
             Scene.Instance.BuildScene();
 
@@ -40,6 +42,29 @@ namespace wakuwaku.Function.WRenderPipeline
             return new WRenderPipeline(this);
         }
 
+
+        delegate void Log(IntPtr message,int size);
+
+        [DllImport("NativeRenderer")]
+        private static extern void RegisterLog(Log log_info, Log log_warning, Log log_error);
+        private void InitializeNaivePlugin()
+        {
+            RegisterLog(LogInfoMessageFromCpp,LogWarningMessageFromCpp,LogErrorMessageFromCpp);                                                                                                         
+            //RegisterLog(Debug.Log,Debug.LogWarning,Debug.LogError);
+        }
+
+        public static void LogInfoMessageFromCpp(IntPtr message,int size)
+        {
+            Debug.Log(Marshal.PtrToStringAnsi(message, size));
+        }
+        public static void LogWarningMessageFromCpp(IntPtr message, int size)
+        {
+            Debug.LogWarning(Marshal.PtrToStringAnsi(message, size));
+        }
+        public static void LogErrorMessageFromCpp(IntPtr message, int size)
+        {
+            Debug.LogError(Marshal.PtrToStringAnsi(message, size));
+        }
         private void OnDisable()
         {
             //Scene.Clear();
@@ -74,8 +99,7 @@ namespace wakuwaku.Function.WRenderPipeline
         protected override void Render(ScriptableRenderContext context, Camera[] cameras)
         {
             WRenderPipeline.context = context;
-
-            CommandBuffer commandBuffer = new CommandBuffer();
+            
 
             BeginFrameRendering(context, cameras);
             foreach (var camera in cameras)

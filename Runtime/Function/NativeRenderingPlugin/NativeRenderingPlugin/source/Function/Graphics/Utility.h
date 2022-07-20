@@ -17,6 +17,7 @@
 
 namespace Utility
 {
+
     inline void Print(const char* msg) { wakuwaku::LogManager::Instance().Error(msg); }
     //inline void Print( const wchar_t* msg ) { wprintf(L"%ws", msg); }
 
@@ -77,7 +78,7 @@ namespace Utility
 #endif
 
 #define HALT( ... ) ERROR( __VA_ARGS__ ) __debugbreak();
-
+HRESULT WINAPI DXTraceW(_In_z_ const WCHAR* strFile, _In_ DWORD dwLine, _In_ HRESULT hr, _In_opt_ const WCHAR* strMsg, _In_ bool bPopMsgBox);
 #ifdef RELEASE
 
     #define ASSERT( isTrue, ... ) (void)(isTrue)
@@ -100,14 +101,19 @@ namespace Utility
             __debugbreak(); \
         }
 
-    #define ASSERT_SUCCEEDED( hr, ... ) \
-        if (FAILED(hr)) { \
-            Utility::Print("\nHRESULT failed in " STRINGIFY_BUILTIN(__FILE__) " @ " STRINGIFY_BUILTIN(__LINE__) "\n"); \
-            Utility::PrintSubMessage("hr = 0x%08X", hr); \
-            Utility::PrintSubMessage(__VA_ARGS__); \
-            Utility::Print("\n"); \
-            __debugbreak(); \
-        }
+    #define ASSERT_SUCCEEDED( x, ... ) \
+        {HRESULT hr = (x);										\
+		if(FAILED(hr))											\
+		{														\
+			DXTraceW(__FILEW__, (DWORD)__LINE__, hr, L#x, true);\
+		}}	
+        //if (FAILED(hr)) { \
+        //    Utility::Print("\nHRESULT failed in " STRINGIFY_BUILTIN(__FILE__) " @ " STRINGIFY_BUILTIN(__LINE__) "\n"); \
+        //    Utility::PrintSubMessage("hr = 0x%08X", hr); \
+        //    Utility::PrintSubMessage(__VA_ARGS__); \
+        //    Utility::Print("\n"); \
+        //    __debugbreak(); \
+        //}
 
 
     #define WARN_ONCE_IF( isTrue, ... ) \

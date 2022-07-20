@@ -71,10 +71,14 @@ void CommandQueue::Create(ID3D12Device* pDevice)
     ASSERT(!IsReady());
     ASSERT(m_AllocatorPool.Size() == 0);
 
+//     if (m_Type == D3D12_COMMAND_LIST_TYPE_DIRECT)
+//         return;
     D3D12_COMMAND_QUEUE_DESC QueueDesc = {};
     QueueDesc.Type = m_Type;
     QueueDesc.NodeMask = 1;
-    pDevice->CreateCommandQueue(&QueueDesc, MY_IID_PPV_ARGS(&m_CommandQueue));
+    
+    auto  hr = pDevice->GetDeviceRemovedReason();
+    ASSERT_SUCCEEDED(pDevice->CreateCommandQueue(&QueueDesc, MY_IID_PPV_ARGS(&m_CommandQueue)));
     m_CommandQueue->SetName(L"CommandListManager::m_CommandQueue");
 
     ASSERT_SUCCEEDED(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, MY_IID_PPV_ARGS(&m_pFence)));
@@ -89,6 +93,27 @@ void CommandQueue::Create(ID3D12Device* pDevice)
     ASSERT(IsReady());
 }
 
+void CommandQueue::Create(ID3D12Device* pDevice,ID3D12CommandQueue* pQueue)
+{
+	ASSERT(pDevice != nullptr);
+	ASSERT(!IsReady());
+	ASSERT(m_AllocatorPool.Size() == 0);
+
+    m_CommandQueue = pQueue;
+    auto  hr1 = pDevice->GetDeviceRemovedReason();
+	ASSERT_SUCCEEDED(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, MY_IID_PPV_ARGS(&m_pFence)));
+    auto  hr2 = pDevice->GetDeviceRemovedReason();
+	m_pFence->SetName(L"CommandListManager::m_pFence");
+	m_pFence->Signal((uint64_t)m_Type << 56);
+
+	m_FenceEventHandle = CreateEvent(nullptr, false, false, nullptr);
+	ASSERT(m_FenceEventHandle != NULL);
+
+	m_AllocatorPool.Create(pDevice);
+
+	ASSERT(IsReady());
+}
+
 void CommandListManager::Create(ID3D12Device* pDevice)
 {
     ASSERT(pDevice != nullptr);
@@ -96,8 +121,26 @@ void CommandListManager::Create(ID3D12Device* pDevice)
     m_Device = pDevice;
 
     m_GraphicsQueue.Create(pDevice);
+    m_GraphicsQueue.GetCommandQueue()->SetName(L"m_GraphicsQueue");
     m_ComputeQueue.Create(pDevice);
+    m_ComputeQueue.GetCommandQueue()->SetName(L"m_ComputeQueue");
     m_CopyQueue.Create(pDevice);
+    m_CopyQueue.GetCommandQueue()->SetName(L"m_CopyQueue");
+}
+
+void CommandListManager::Create(ID3D12Device* pDevice, ID3D12CommandQueue* pQueue)
+{
+	ASSERT(pDevice != nullptr);
+	ASSERT(pQueue != nullptr);
+
+	m_Device = pDevice;
+
+    m_GraphicsQueue.Create(pDevice, pQueue);
+	//m_GraphicsQueue.GetCommandQueue()->SetName(L"m_GraphicsQueue");
+	m_ComputeQueue.Create(pDevice);
+	m_ComputeQueue.GetCommandQueue()->SetName(L"m_ComputeQueue");
+	m_CopyQueue.Create(pDevice);
+	m_CopyQueue.GetCommandQueue()->SetName(L"m_CopyQueue");
 }
 
 void CommandListManager::CreateNewCommandList( D3D12_COMMAND_LIST_TYPE Type, ID3D12GraphicsCommandList** List, ID3D12CommandAllocator** Allocator )

@@ -31,9 +31,9 @@ namespace wakuwaku.Function.WRenderPipeline
         public Material BlitMat;
         protected override RenderPipeline CreatePipeline()
         {
-            InitializeNaivePlugin();
+            //InitializeNaivePlugin();
             Debug.Log("Create Pipeline");
-            Scene.Instance.BuildScene();
+           // Scene.Instance.BuildScene();
 
             if (Shader.GetGlobalTexture("g_sky_box") == null && sky_box_tex != null)
             {

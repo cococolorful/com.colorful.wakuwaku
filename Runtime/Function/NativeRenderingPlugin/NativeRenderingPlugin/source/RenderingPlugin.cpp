@@ -21,101 +21,116 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API
 	wakuwaku::LogManager::Instance().Initialize(log_info, log_warning, log_error);
 }
 
+namespace wakuwaku::NativeRenderer
+{
+	// Unity related
+	IUnityInterfaces* s_UnityInterfaces = NULL;
+	IUnityGraphics* s_Graphics = NULL;
 
+	void Initialize(IUnityInterfaces* unityInterfaces);
+	void OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType);
+	void Shutdown();
 
+	// Rendering
+	size_t scene_width = 600;
+	size_t scene_height = 800;
+	DXGI_FORMAT scene_format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 
-// --------------------------------------------------------------------------
-// UnitySetInterfaces
+	int frame_buffer_count = 3;
+	std::vector< ColorBuffer> frame_buffers(frame_buffer_count);
+	
+	void OnSize(int width, int height, int frame_buffer_count,DXGI_FORMAT format);
+	
+	void Render();
+};
 
-static void UNITY_INTERFACE_API OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType);
-
-static IUnityInterfaces* s_UnityInterfaces = NULL;
-static IUnityGraphics* s_Graphics = NULL;
-
-extern "C" void	UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
+void wakuwaku::NativeRenderer::Initialize(IUnityInterfaces* unityInterfaces)
 {
 	s_UnityInterfaces = unityInterfaces;
 	s_Graphics = s_UnityInterfaces->Get<IUnityGraphics>();
-	s_Graphics->RegisterDeviceEventCallback(OnGraphicsDeviceEvent);
 
-	
+	s_Graphics->RegisterDeviceEventCallback(OnGraphicsDeviceEvent);
 	// Run OnGraphicsDeviceEvent(initialize) manually on plugin load
 	OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize);
+
+	
 }
-
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
-{
-	s_Graphics->UnregisterDeviceEventCallback(OnGraphicsDeviceEvent);
-}
-
-
-
-// --------------------------------------------------------------------------
-// GraphicsDeviceEvent
-
-
-static UnityGfxRenderer s_DeviceType = kUnityGfxRendererNull;
-
-
-static void UNITY_INTERFACE_API OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType)
+void wakuwaku::NativeRenderer::OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType)
 {
 	// Create graphics API implementation upon initialization
 	if (eventType == kUnityGfxDeviceEventInitialize)
 	{
-		s_DeviceType = s_Graphics->GetRenderer();
-		assert(s_DeviceType == kUnityGfxRendererD3D12);
+		assert(s_Graphics->GetRenderer() == kUnityGfxRendererD3D12);
 		Graphics::Initialize(s_UnityInterfaces);
 	}
-
 
 	// Cleanup graphics API implementation upon shutdown
 	if (eventType == kUnityGfxDeviceEventShutdown)
 	{
 		Graphics::Shutdown();
-		s_DeviceType = kUnityGfxRendererNull;
 	}
 }
-ColorBuffer color;
-static bool first = true;
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ModifyTexture(void* texture_handle, float* color4)
+void wakuwaku::NativeRenderer::Shutdown()
 {
-	if (texture_handle == nullptr)
-	{
-		wakuwaku::LogManager::Instance().Info("the texture is null");
-			return;
-	}
-	if (first)
-	{
-		color.Create(L"test", 600, 800, 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
-		first = false;
-	}
+	s_Graphics->UnregisterDeviceEventCallback(OnGraphicsDeviceEvent);
+}
+
+void wakuwaku::NativeRenderer::Render()
+{
 	auto& ctx = GraphicsContext::Begin(L"modify texture");
+	static Color c;
+	static int idx = 0;
+	idx %= 3;
+	static int r = 0;
+	c[0] = (r + 1) / 255;
+	r %= 255;
 
-	ctx.ClearColor(color, color4);
+	auto& current_frame_buffer = frame_buffers[idx++];
 
-	//GpuResource dst{ static_cast<ID3D12Resource*>(texture_handle),D3D12_RESOURCE_STATE_COPY_DEST };
-	//
-	//ctx.ClearUAV (dst, 0, 0, 0, color);
-	ctx.Finish(true);
+	ctx.TransitionResource(current_frame_buffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	ctx.ClearColor(frame_buffers[idx], c.GetPtr());
+	ctx.TransitionResource(current_frame_buffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	ctx.Finish();
 }
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Render(void* back_buffer)
+
+void wakuwaku::NativeRenderer::OnSize(int width, int height, int buffer_count, DXGI_FORMAT format)
 {
-	
-}
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API DrawMesh(void* vertex_buffer_handle, void* index_buffer_handle, float* MVP, void* rt)
-{
-	
+	scene_width = width;
+	scene_height = height;
+
+	scene_format = format;
+
+	frame_buffer_count = buffer_count;
+
+	frame_buffers.resize(frame_buffer_count);
+	// Rendering
+	for (int i = 0; i < frame_buffer_count; i++)
+	{
+		frame_buffers[i].Create(L"test" + std::to_wstring(i), scene_width, scene_height, 1, scene_format);
+	}
 }
 
 // --------------------------------------------------------------------------
-// GetRenderEventFunc, an example function we export which is used to get a rendering event callback function.
-
-void OnRenderEvent(int event_id)
+// UnitySetInterfaces
+extern "C" void	UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
 {
-
-}
-extern "C" UnityRenderingEvent UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderEventFunc()
-{
-	return OnRenderEvent;
+	wakuwaku::NativeRenderer::Initialize(unityInterfaces);
 }
 
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
+{
+	wakuwaku::NativeRenderer::Shutdown();
+}
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API OnSize(int width, int height, int frame_buffer_count,void** frame_buffer_array)
+{
+	wakuwaku::NativeRenderer::OnSize(width, height, frame_buffer_count,DXGI_FORMAT_R32G32B32A32_FLOAT);
+	
+	for (size_t i = 0; i < frame_buffer_count; i++)
+	{
+		frame_buffer_array[i] = wakuwaku::NativeRenderer::frame_buffers[i].GetResource();
+	}
+}
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Render()
+{
+	wakuwaku::NativeRenderer::Render();
+}

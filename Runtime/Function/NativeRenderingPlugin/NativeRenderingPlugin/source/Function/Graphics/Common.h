@@ -13,19 +13,44 @@
 
 #pragma once
 
+
 #pragma warning(disable:4201) // nonstandard extension used : nameless struct/union
 #pragma warning(disable:4238) // nonstandard extension used : class rvalue used as lvalue
+#pragma warning(disable:4239) // A non-const reference may only be bound to an lvalue; assignment operator takes a reference to non-const
 #pragma warning(disable:4324) // structure was padded due to __declspec(align())
 
-#ifndef WIN32_LEAN_AND_MEAN
+#include <winsdkver.h>
+#define _WIN32_WINNT 0x0A00
+#include <sdkddkver.h>
+
+
+
+// DirectX apps don't need GDI
+#define NODRAWTEXT
+#define NOGDI
+#define NOBITMAP
+
+// Include <mcx.h> if you need this
+#define NOMCX
+
+// Include <winsvc.h> if you need this
+#define NOSERVICE
+
+// WinHelp is deprecated
+#define NOHELP
+
 #define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+
+#include <Windows.h>
+#include <wrl/client.h>
+#include <wrl/event.h>
 
 #include <d3d12.h>
+#include <dxgi1_6.h>
+#include "d3dx12.h"
+#ifdef _DEBUG
+#include <dxgidebug.h>
+#endif
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -43,10 +68,11 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <cwctype>
 #include <exception>
 
-#include <wrl.h>
 #include <ppltasks.h>
+#include <functional>
 
 #include "Utility.h"
 #include "../../Core/Math/VectorMath.h"

@@ -29,6 +29,7 @@ public:
     ~CommandQueue();
 
     void Create(ID3D12Device* pDevice);
+    void Create(ID3D12Device* pDevice,ID3D12CommandQueue* pQueue);
     void Shutdown();
 
     inline bool IsReady()
@@ -77,6 +78,7 @@ public:
     CommandListManager();
     ~CommandListManager();
 
+	void Create(ID3D12Device* pDevice, ID3D12CommandQueue* pQueue);
     void Create(ID3D12Device* pDevice);
     void Shutdown();
 

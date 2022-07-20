@@ -38,9 +38,10 @@ namespace wakuwaku.Function.WRenderPipeline
             base.OnInspectorGUI();
             //base.OnInspectorGUI();
 
-            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.BeginVertical();
             EditorGUILayout.ObjectField(m_serialized_waku_camera.render_graph);
-            EditorGUILayout.EndHorizontal();
+            m_additional_camera_data.frame_buffer_count = EditorGUILayout.IntField("frame_buffer_count",m_additional_camera_data.frame_buffer_count);
+            EditorGUILayout.EndVertical();
 
             m_serialized_waku_camera.Apply();
         }

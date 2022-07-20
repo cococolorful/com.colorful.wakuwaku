@@ -18,7 +18,7 @@
 #include <vector>
 #include <queue>
 
-namespace wakuwaku::Graphics
+namespace Graphics
 {
     extern ID3D12Device* g_Device;
 }

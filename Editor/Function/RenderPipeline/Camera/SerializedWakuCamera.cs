@@ -29,7 +29,7 @@ namespace wakuwaku.Function.WRenderPipeline
 
         // Colorful specific properties
         public SerializedProperty render_graph;
-
+        //public SerializedProperty frame_buffer_count;
         public SerializedWakuCamera(SerializedObject serializedObject)
         {
             this.serializedObject = serializedObject;
@@ -38,6 +38,7 @@ namespace wakuwaku.Function.WRenderPipeline
             serializedAdditionalDataObject = new SerializedObject(additional_camera_data);
 
             render_graph = serializedAdditionalDataObject.Find((WakuAdditionalCameraData d) => d.render_graph);
+            //frame_buffer_count = serializedAdditionalDataObject.Find((WakuAdditionalCameraData d) => d.frame_buffer_count);
 
         }
         public void Apply()

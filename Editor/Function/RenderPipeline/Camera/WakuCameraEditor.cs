@@ -41,6 +41,7 @@ namespace wakuwaku.Function.WRenderPipeline
             EditorGUILayout.BeginVertical();
             EditorGUILayout.ObjectField(m_serialized_waku_camera.render_graph);
             m_additional_camera_data.frame_buffer_count = EditorGUILayout.IntField("frame_buffer_count",m_additional_camera_data.frame_buffer_count);
+            m_additional_camera_data.use_native_render = EditorGUILayout.Toggle("use_native_render", m_additional_camera_data.use_native_render);
             EditorGUILayout.EndVertical();
 
             m_serialized_waku_camera.Apply();

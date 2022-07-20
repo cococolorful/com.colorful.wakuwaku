@@ -104,6 +104,23 @@ namespace wakuwaku.Function.WRenderPipeline
             BeginFrameRendering(context, cameras);
             foreach (var camera in cameras)
             {
+                camera.TryGetComponent<WakuAdditionalCameraData>(out var wakuAdditionalCameraData);
+
+                if (wakuAdditionalCameraData != null && wakuAdditionalCameraData.use_native_render == true)
+                {
+                    BeginCameraRendering(context, camera);
+                    try
+                    {
+                        Graphics.DrawTexture(new Rect(0, 0, camera.pixelWidth, camera.pixelHeight), wakuAdditionalCameraData.native_render_texture[wakuAdditionalCameraData.idx]);
+                    }
+                    catch (Exception e)
+                    {
+                        wakuAdditionalCameraData.Init();
+                    }
+
+                    EndCameraRendering(context, camera);
+                    continue;
+                }
                 //Scene.Instance.ApplyCamera(camera);
                 
                 WRenderGraph rg = GetCameraRenderGraph(camera);

@@ -32,11 +32,12 @@ namespace wakuwaku::NativeRenderer
 	void Shutdown();
 
 	// Rendering
-	size_t scene_width = 600;
-	size_t scene_height = 800;
-	DXGI_FORMAT scene_format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	size_t scene_width;
+	size_t scene_height;
+	DXGI_FORMAT scene_format;
 
-	int frame_buffer_count = 3;
+	int frame_buffer_count;
+	int current_frame_buffer_idx;
 	std::vector< ColorBuffer> frame_buffers(frame_buffer_count);
 	
 	void OnSize(int width, int height, int frame_buffer_count,DXGI_FORMAT format);
@@ -53,7 +54,7 @@ void wakuwaku::NativeRenderer::Initialize(IUnityInterfaces* unityInterfaces)
 	// Run OnGraphicsDeviceEvent(initialize) manually on plugin load
 	OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize);
 
-	
+	OnSize(600, 800, 2, DXGI_FORMAT_R32G32B32A32_FLOAT);
 }
 void wakuwaku::NativeRenderer::OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType)
 {
@@ -79,16 +80,14 @@ void wakuwaku::NativeRenderer::Render()
 {
 	auto& ctx = GraphicsContext::Begin(L"modify texture");
 	static Color c;
-	static int idx = 0;
-	idx %= 3;
 	static int r = 0;
-	c[0] = (r + 1) / 255;
+	c[0] = (r ++) / 255.0f;
 	r %= 255;
 
-	auto& current_frame_buffer = frame_buffers[idx++];
+	auto& current_frame_buffer = frame_buffers[current_frame_buffer_idx];
 
 	ctx.TransitionResource(current_frame_buffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
-	ctx.ClearColor(frame_buffers[idx], c.GetPtr());
+	ctx.ClearColor(current_frame_buffer, c.GetPtr());
 	ctx.TransitionResource(current_frame_buffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	ctx.Finish();
 }
@@ -130,7 +129,9 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API OnSize(int width, int
 		frame_buffer_array[i] = wakuwaku::NativeRenderer::frame_buffers[i].GetResource();
 	}
 }
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Render()
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Render()
 {
+	wakuwaku::NativeRenderer::current_frame_buffer_idx %= wakuwaku::NativeRenderer::frame_buffer_count;
 	wakuwaku::NativeRenderer::Render();
+	return wakuwaku::NativeRenderer::current_frame_buffer_idx ++ ;
 }

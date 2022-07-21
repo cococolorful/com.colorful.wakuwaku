@@ -36,6 +36,8 @@ public:
 	void CreatePlaced(const std::wstring& name, ID3D12Heap* pBackingHeap, uint32_t HeapOffset, uint32_t NumElements, uint32_t ElementSize,
 		const void* initialData = nullptr);
 
+	void Attach(ID3D12Resource* resource, UINT num_elemenets);
+	
 	const D3D12_CPU_DESCRIPTOR_HANDLE& GetUAV(void) const { return m_UAV; }
 	const D3D12_CPU_DESCRIPTOR_HANDLE& GetSRV(void) const { return m_SRV; }
 

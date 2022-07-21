@@ -85,6 +85,25 @@ void GpuBuffer::CreatePlaced(const std::wstring& name, ID3D12Heap* pBackingHeap,
 
 }
 
+void GpuBuffer::Attach(ID3D12Resource* resource,UINT num_elemenets)
+{
+	Destroy();
+
+	auto desc = resource->GetDesc();
+	assert(desc.DepthOrArraySize == 1);
+	assert(desc.Height == 1);
+	m_BufferSize = desc.Width;
+	m_ElementCount = num_elemenets;
+	m_ElementSize = desc.Width / num_elemenets;
+
+	m_UsageState = D3D12_RESOURCE_STATE_COMMON;
+
+	m_pResource = resource;
+	m_GpuVirtualAddress = m_pResource->GetGPUVirtualAddress();
+
+	CreateDerivedViews();
+}
+
 void GpuBuffer::Create(const std::wstring& name, uint32_t NumElements, uint32_t ElementSize,
 	EsramAllocator&, const void* initialData)
 {

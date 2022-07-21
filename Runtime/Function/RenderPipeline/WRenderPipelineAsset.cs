@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using System.Runtime.InteropServices;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace wakuwaku.Function.WRenderPipeline
 {
@@ -73,7 +74,7 @@ namespace wakuwaku.Function.WRenderPipeline
 
     }
 
-    public class WRenderPipeline : RenderPipeline
+    public unsafe class WRenderPipeline : RenderPipeline
     {
         WRenderPipelineAsset mAsset;
 
@@ -86,16 +87,40 @@ namespace wakuwaku.Function.WRenderPipeline
         }
         protected override void Dispose(bool disposing)
         {
-//             void Dispose(WRenderGraph obj)
-//             {
-//                 if (obj != null)
-//                     obj.Cleanup();
-//                 obj = null;
-//             }
-//             base.Dispose(disposing);
-//             Dispose(mGameRenderGraph);
-//             Dispose(mSceneRenderGraph);
+            //             void Dispose(WRenderGraph obj)
+            //             {
+            //                 if (obj != null)
+            //                     obj.Cleanup();
+            //                 obj = null;
+            //             }
+            //             base.Dispose(disposing);
+            //             Dispose(mGameRenderGraph);
+            //             Dispose(mSceneRenderGraph);
         }
+
+        public struct CameraData
+        {
+            public Matrix4x4 view_matrix;
+            public Matrix4x4 prev_view_matrix;
+            public Matrix4x4 proj_matrix;
+            public Matrix4x4 view_proj_matrix;
+            public Matrix4x4 inv_view_proj_matrix;
+            public Matrix4x4 view_proj_no_jitter_matrix;
+            public Matrix4x4 prev_view_proj_no_jittermatrix;
+            public Matrix4x4 proj_no_jitter_matrix;
+        };
+        public void BindCamera(Camera camera)
+        {
+            camera_data.view_matrix = camera.worldToCameraMatrix;
+            camera_data.view_proj_matrix = camera.worldToCameraMatrix * camera.projectionMatrix;
+
+            ApplyCamera(UnsafeUtility.AddressOf(ref camera_data));
+        }
+
+        CameraData camera_data = new CameraData();
+        [DllImport("NativeRenderer")]
+        private static extern void ApplyCamera(void* camera_data);
+
         protected override void Render(ScriptableRenderContext context, Camera[] cameras)
         {
             WRenderPipeline.context = context;
@@ -106,8 +131,9 @@ namespace wakuwaku.Function.WRenderPipeline
             {
                 camera.TryGetComponent<WakuAdditionalCameraData>(out var wakuAdditionalCameraData);
 
-                if (wakuAdditionalCameraData != null && wakuAdditionalCameraData.use_native_render == true)
+                if (Application.isPlaying && wakuAdditionalCameraData != null && wakuAdditionalCameraData.use_native_render == true)
                 {
+                    BindCamera(camera);
                     BeginCameraRendering(context, camera);
                     try
                     {

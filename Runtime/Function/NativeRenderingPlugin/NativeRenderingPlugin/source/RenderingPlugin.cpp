@@ -25,59 +25,80 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API
 	wakuwaku::LogManager::Instance().Initialize(log_info, log_warning, log_error);
 }
 
-namespace wakuwaku::NativeRenderer
+namespace wakuwaku
 {
+	void OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType);
 	// Unity related
 	IUnityInterfaces* s_UnityInterfaces = NULL;
 	IUnityGraphics* s_Graphics = NULL;
 
-	void Initialize(IUnityInterfaces* unityInterfaces);
-	void OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType);
-	void Shutdown();
-
-	constexpr DXGI_FORMAT k_format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-	// Rendering
-	size_t scene_width;
-	size_t scene_height;
-	DXGI_FORMAT scene_format;
-
-	int frame_buffer_count;
-	int current_frame_buffer_idx;
-	std::vector< ColorBuffer> frame_buffers(frame_buffer_count);
-	
-	void OnSize(int width, int height, int frame_buffer_count,DXGI_FORMAT format);
-	void Render();
-
-	// scene manipulate
-	struct Mesh
+	class NativeRenderer
 	{
-		StructuredBuffer vectex_buffer;
-		StructuredBuffer index_buffer;
-		struct SubMesh
+	public:
+		void Initialize();
+		
+		void Shutdown();
+
+		constexpr static DXGI_FORMAT k_format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+		// Rendering
+		size_t scene_width;
+		size_t scene_height;
+		DXGI_FORMAT scene_format;
+
+		int frame_buffer_count;
+		int current_frame_buffer_idx;
+		std::vector< ColorBuffer> frame_buffers = std::vector< ColorBuffer>(frame_buffer_count);
+
+		void OnSize(int width, int height, int frame_buffer_count, DXGI_FORMAT format);
+		void Render();
+
+		// scene manipulate
+		struct Mesh
 		{
-			int index_start;
-			int index_count;
+			StructuredBuffer vectex_buffer;
+			StructuredBuffer index_buffer;
+			struct SubMesh
+			{
+				int index_start;
+				int index_count;
+			};
+			std::vector<SubMesh> subMeshes;
 		};
-		std::vector<SubMesh> subMeshes;		
+		std::unordered_map<int, Mesh> mesh_map;
+
+		struct RenderItem
+		{
+			int mesh_id;
+			Math::Matrix4 transform;
+			std::vector<int> material;
+		};
+
+		int AddMesh(int mesh_id, void* vertex_handle, int num_vectex_elements, void* index_handlem, int num_index_elements, Mesh::SubMesh* subMeshes, int subMesh_count);
+
+		// texture
+		std::unordered_map<int, Texture> texture_map;
+		int AddTexture(int id, void* texture_hanle);
+
+
+		// -------------------------------------------------------------------------------------------
+		// Camera
+		// -------------------------------------------------------------------------------------------
+		struct CameraData
+		{
+			Math::Matrix4 view_matrix;
+			Math::Matrix4 prev_view_matrix;
+			Math::Matrix4 proj_matrix;
+			Math::Matrix4 view_proj_matrix;
+			Math::Matrix4 inv_view_proj_matrix;
+			Math::Matrix4 view_proj_no_jitter_matrix;
+			Math::Matrix4 prev_view_proj_no_jittermatrix;
+			Math::Matrix4 proj_no_jitter_matrix;
+		};
+		CameraData _camera;
 	};
-	std::vector<Mesh> meshes;
-	struct RenderItem
-	{
-		int mesh_id;
-		Math::Matrix4 transform;
-		std::vector<int> material;
-	};
-
-
-
-	int AddMesh(void* vertex_handle, int num_vectex_elements, void* index_handlem, int num_index_elements, Mesh::SubMesh* subMeshes, int subMesh_count);
-	
-	// texture
-	std::unordered_map<int, Texture> texture_map;
-	int AddTexture(int id, void* texture_hanle);
-
-
 };
+
+std::unique_ptr< wakuwaku::NativeRenderer> g_native_renderer;
 
 namespace wakuwaku::GraphicsState
 {
@@ -180,7 +201,7 @@ void wakuwaku::PSOManager::Initialize()
 	pso_blit.SetPrimitiveTopologyType(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
 	pso_blit.SetVertexShader(g_pScreenQuadVS, sizeof(g_pScreenQuadVS));
 	pso_blit.SetPixelShader(g_pBlitPS, sizeof(g_pBlitPS));
-	pso_blit.SetRenderTargetFormat(NativeRenderer::scene_format, DXGI_FORMAT_UNKNOWN);
+	pso_blit.SetRenderTargetFormat(g_native_renderer->scene_format, DXGI_FORMAT_UNKNOWN);
 	pso_blit.Finalize();
 }
 int wakuwaku::NativeRenderer::AddTexture(int id, void* texture_hanle)
@@ -195,10 +216,11 @@ int wakuwaku::NativeRenderer::AddTexture(int id, void* texture_hanle)
 	return 1;
 }
 
-int wakuwaku::NativeRenderer::AddMesh(void* vertex_handle, int num_vectex_elements, void* index_handlem, int num_index_elements, Mesh::SubMesh* subMeshes, int subMesh_count)
+int wakuwaku::NativeRenderer::AddMesh(int mesh_id, void* vertex_handle, int num_vectex_elements, void* index_handlem, int num_index_elements, Mesh::SubMesh* subMeshes, int subMesh_count)
 {
-	return 1;
-	int id = meshes.size();
+	if (mesh_map.find(mesh_id) != mesh_map.end())
+		return 1; // existed
+
 	Mesh mesh;
 	mesh.vectex_buffer.Attach(static_cast<ID3D12Resource*>(vertex_handle), num_vectex_elements);
 	mesh.index_buffer.Attach(static_cast<ID3D12Resource*>(vertex_handle), num_vectex_elements);
@@ -208,32 +230,25 @@ int wakuwaku::NativeRenderer::AddMesh(void* vertex_handle, int num_vectex_elemen
 	{
 		mesh.subMeshes[i] = subMeshes[i];
 	}
-	meshes.push_back(mesh);
-	return id;
+	mesh_map[mesh_id] = mesh;
+	return 0;
 }
 
-void wakuwaku::NativeRenderer::Initialize(IUnityInterfaces* unityInterfaces)
+void wakuwaku::NativeRenderer::Initialize()
 {
-	s_UnityInterfaces = unityInterfaces;
-	s_Graphics = s_UnityInterfaces->Get<IUnityGraphics>();
-
-	s_Graphics->RegisterDeviceEventCallback(OnGraphicsDeviceEvent);
-	// Run OnGraphicsDeviceEvent(initialize) manually on plugin load
-	OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize);
-
 	OnSize(600, 800, 2, k_format);
 
 	wakuwaku::GraphicsState::Initialize();
 	wakuwaku::PSOManager::Initialize();
 }
 
-void wakuwaku::NativeRenderer::OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType)
+void wakuwaku::OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType)
 {
 	// Create graphics API implementation upon initialization
 	if (eventType == kUnityGfxDeviceEventInitialize)
 	{
-		assert(s_Graphics->GetRenderer() == kUnityGfxRendererD3D12);
-		Graphics::Initialize(s_UnityInterfaces);
+		assert(wakuwaku::s_Graphics->GetRenderer() == kUnityGfxRendererD3D12);
+		Graphics::Initialize(wakuwaku::s_UnityInterfaces);
 	}
 
 	// Cleanup graphics API implementation upon shutdown
@@ -308,40 +323,63 @@ void wakuwaku::NativeRenderer::OnSize(int width, int height, int buffer_count, D
 	}
 }
 
+
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API OnSize(int width, int height, int frame_buffer_count,void** frame_buffer_array)
+{
+	g_native_renderer->OnSize(width, height, frame_buffer_count, wakuwaku::NativeRenderer::k_format);
+	
+	for (size_t i = 0; i < frame_buffer_count; i++)
+	{
+		frame_buffer_array[i] = g_native_renderer->frame_buffers[i].GetResource();
+	}
+}
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API OnInitialize()
+{
+	g_native_renderer.reset(new wakuwaku::NativeRenderer());
+	g_native_renderer->Initialize();
+}
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API OnNativeRendererQuit()
+{
+	g_native_renderer->Shutdown();
+	g_native_renderer = nullptr;
+}
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ApplyCamera(void* camera_data)
+{
+	g_native_renderer->_camera = *static_cast<wakuwaku::NativeRenderer::CameraData*>(camera_data);
+}
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Render()
+{
+	g_native_renderer->current_frame_buffer_idx %= g_native_renderer->frame_buffer_count;
+	g_native_renderer->Render();
+	return g_native_renderer->current_frame_buffer_idx ++ ;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API AddMesh(int mesh_id, void* vertex_handle, int num_vectex_elements, void* index_handlem, int num_index_elements, wakuwaku::NativeRenderer::Mesh::SubMesh * subMeshes, int subMesh_count)
+{
+	return g_native_renderer->AddMesh(mesh_id,vertex_handle, num_vectex_elements, index_handlem, num_index_elements, subMeshes, subMesh_count);
+}
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API AddMaterial(int id,void* texture_handle)
+{
+	return g_native_renderer->AddTexture(id, texture_handle);
+	//ID3D12Resource* 
+}
+
+
 // --------------------------------------------------------------------------
 // UnitySetInterfaces
-extern "C" void	UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
+// --------------------------------------------------------------------------
+extern "C" void	UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces * unityInterfaces)
 {
-	wakuwaku::NativeRenderer::Initialize(unityInterfaces);
+	wakuwaku::s_UnityInterfaces = unityInterfaces;
+	wakuwaku::s_Graphics = wakuwaku::s_UnityInterfaces->Get<IUnityGraphics>();
+
+	// Run OnGraphicsDeviceEvent(initialize) manually on plugin load
+	wakuwaku::OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize);
+
+	OnInitialize();
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
 {
-	wakuwaku::NativeRenderer::Shutdown();
-}
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API OnSize(int width, int height, int frame_buffer_count,void** frame_buffer_array)
-{
-	wakuwaku::NativeRenderer::OnSize(width, height, frame_buffer_count, wakuwaku::NativeRenderer::k_format);
-	
-	for (size_t i = 0; i < frame_buffer_count; i++)
-	{
-		frame_buffer_array[i] = wakuwaku::NativeRenderer::frame_buffers[i].GetResource();
-	}
-}
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Render()
-{
-	wakuwaku::NativeRenderer::current_frame_buffer_idx %= wakuwaku::NativeRenderer::frame_buffer_count;
-	wakuwaku::NativeRenderer::Render();
-	return wakuwaku::NativeRenderer::current_frame_buffer_idx ++ ;
-}
-
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API AddMesh(void* vertex_handle, int num_vectex_elements, void* index_handlem, int num_index_elements, wakuwaku::NativeRenderer::Mesh::SubMesh * subMeshes, int subMesh_count)
-{
-	return wakuwaku::NativeRenderer::AddMesh(vertex_handle, num_vectex_elements, index_handlem, num_index_elements, subMeshes, subMesh_count);
-}
-
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API AddMaterial(int id,void* texture_handle)
-{
-	return wakuwaku::NativeRenderer::AddTexture(id, texture_handle);
-	//ID3D12Resource* 
+	OnNativeRendererQuit();
 }

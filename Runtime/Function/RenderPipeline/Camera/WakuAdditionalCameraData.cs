@@ -25,13 +25,21 @@ namespace wakuwaku.Function.WRenderPipeline
 
         [DllImport("NativeRenderer")]
         private static extern void OnSize(int width, int height, int frame_buffer_count, IntPtr[] color_handles);
-        void Start()
+        [DllImport("NativeRenderer")]
+        private static extern void OnNativeRendererQuit();
+        [DllImport("NativeRenderer")]
+        private static extern void OnInitialize();
+        static bool sigle = false ;
+        private void Awake()
         {
+            OnInitialize();
+
             Init();
         }
-        private void OnEnable()
+            
+        private void OnDisable()
         {
-           
+            OnNativeRendererQuit();
         }
         public void Init()
         {

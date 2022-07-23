@@ -108,6 +108,19 @@ namespace wakuwaku.Function.WRenderPipeline
             public Matrix4x4 view_proj_no_jitter_matrix;
             public Matrix4x4 prev_view_proj_no_jittermatrix;
             public Matrix4x4 proj_no_jitter_matrix;
+
+
+            public Vector3 pos_world;
+            public float near_z;
+
+            public Vector3 right;
+            public float jitter_x;
+
+            public Vector3 up;
+            public float jitter_y;
+
+            public Vector3 forward;
+            public float far_z;
         };
         public void BindCamera(Camera camera)
         {

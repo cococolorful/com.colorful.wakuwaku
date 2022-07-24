@@ -176,7 +176,7 @@ void DynamicDescriptorHeap::DescriptorHandleCache::CopyAndBindStaleTables(
 
     m_StaleRootParamsBitMap = 0;
 
-    static const uint32_t kMaxDescriptorsPerCopy = 16;
+    static const uint32_t kMaxDescriptorsPerCopy = 256;
     UINT NumDestDescriptorRanges = 0;
     D3D12_CPU_DESCRIPTOR_HANDLE pDestDescriptorRangeStarts[kMaxDescriptorsPerCopy];
     UINT pDestDescriptorRangeSizes[kMaxDescriptorsPerCopy];

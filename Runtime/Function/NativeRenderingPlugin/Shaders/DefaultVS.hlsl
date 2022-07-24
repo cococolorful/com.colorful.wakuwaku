@@ -21,6 +21,7 @@ DefaultVertexOut main(DefaultVertexIn v_in)
     float4 posW = mul(worldMat, float4(v_in.PosL, 1.0f));
     o.PosW = posW.xyz;
     o.PosH = mul(g_camera.CameraGetViewProj(), posW);
+    o.PosH = mul(mul(g_camera.GetProj(), g_camera.GetView()), posW);
     
     o.texCoord = v_in.texCoord;
     o.NormalW = normalize(mul(ins_data.GetWorldInvTransMatrix(), float4(v_in.NormalL, 0))).xyz;

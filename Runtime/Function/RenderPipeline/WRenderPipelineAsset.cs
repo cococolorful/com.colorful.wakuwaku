@@ -125,7 +125,9 @@ namespace wakuwaku.Function.WRenderPipeline
         public void BindCamera(Camera camera)
         {
             camera_data.view_matrix = camera.worldToCameraMatrix;
-            camera_data.view_proj_matrix = camera.worldToCameraMatrix * camera.projectionMatrix;
+            camera_data.proj_matrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix,true);
+            Debug.Log(camera_data.proj_matrix);
+            camera_data.view_proj_matrix = camera_data.view_matrix * camera_data.proj_matrix;
 
             ApplyCamera(UnsafeUtility.AddressOf(ref camera_data));
         }
@@ -133,11 +135,9 @@ namespace wakuwaku.Function.WRenderPipeline
         CameraData camera_data = new CameraData();
         [DllImport("NativeRenderer")]
         private static extern void ApplyCamera(void* camera_data);
-
         protected override void Render(ScriptableRenderContext context, Camera[] cameras)
         {
             WRenderPipeline.context = context;
-            
 
             BeginFrameRendering(context, cameras);
             foreach (var camera in cameras)
@@ -160,7 +160,6 @@ namespace wakuwaku.Function.WRenderPipeline
                     EndCameraRendering(context, camera);
                     continue;
                 }
-                //Scene.Instance.ApplyCamera(camera);
                 
                 WRenderGraph rg = GetCameraRenderGraph(camera);
 

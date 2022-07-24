@@ -58,7 +58,7 @@ namespace wakuwaku
 		int frame_buffer_count;
 		int current_frame_buffer_idx;
 		std::vector< ColorBuffer> frame_buffers = std::vector< ColorBuffer>(frame_buffer_count);
-		DepthBuffer scene_depth_buffer;
+		DepthBuffer scene_depth_buffer = {0.0f,0 };
 
 
 		void OnSize(int width, int height, int frame_buffer_count, DXGI_FORMAT format);
@@ -162,13 +162,13 @@ std::unique_ptr< wakuwaku::NativeRenderer> g_native_renderer;
 namespace wakuwaku::GraphicsState
 {
 	SamplerDesc SamplerLinearClampDesc;
-
+	SamplerDesc SamplerLinearWarpDesc;
 	
 	D3D12_RASTERIZER_DESC RasterizerDefault; // counter-clockwise
 	D3D12_RASTERIZER_DESC RasterizerDefaultCw; // clockwise
 
 	D3D12_BLEND_DESC BlendNoColorWrite;
-	D3D12_BLEND_DESC BlendDisable;
+	D3D12_BLEND_DESC BlendTransparent;
 
 	D3D12_DEPTH_STENCIL_DESC DepthStateDefault;
 	D3D12_DEPTH_STENCIL_DESC DepthStateDisabled;
@@ -179,6 +179,9 @@ void wakuwaku::GraphicsState::Initialize()
 {
 	SamplerLinearClampDesc.Filter = D3D12_FILTER_MINIMUM_MIN_MAG_MIP_LINEAR;
 	SamplerLinearClampDesc.SetTextureAddressMode(D3D12_TEXTURE_ADDRESS_MODE_CLAMP);
+
+	SamplerLinearWarpDesc.Filter = D3D12_FILTER_MINIMUM_MIN_MAG_MIP_LINEAR;
+	SamplerLinearWarpDesc.SetTextureAddressMode( D3D12_TEXTURE_ADDRESS_MODE_WRAP);
 	// --------------------------------------------------------------------------------------
 	// rasterizer states
 	// --------------------------------------------------------------------------------------
@@ -200,20 +203,24 @@ void wakuwaku::GraphicsState::Initialize()
 	// --------------------------------------------------------------------------------------
 	// blend states
 	// --------------------------------------------------------------------------------------
-	D3D12_BLEND_DESC alphaBlend = {};
-	alphaBlend.IndependentBlendEnable = FALSE;
-	alphaBlend.RenderTarget[0].BlendEnable = FALSE;
-	alphaBlend.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-	alphaBlend.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
-	alphaBlend.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-	alphaBlend.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-	alphaBlend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
-	alphaBlend.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-	alphaBlend.RenderTarget[0].RenderTargetWriteMask = 0;
-	BlendNoColorWrite = alphaBlend;
+	
+	// Color = SrcAlpha * SrcColor + (1 - SrcAlpha) * DestColor 
+	// Alpha = SrcAlpha
+	
+	BlendTransparent.IndependentBlendEnable = FALSE;
+	BlendTransparent.RenderTarget[0].BlendEnable = TRUE;
+	BlendTransparent.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	BlendTransparent.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	BlendTransparent.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	BlendTransparent.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+	BlendTransparent.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+	BlendTransparent.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	BlendTransparent.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
-	alphaBlend.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-	BlendDisable = alphaBlend;
+	BlendNoColorWrite = BlendTransparent;
+	BlendNoColorWrite.RenderTarget[0].BlendEnable = FALSE;
+	BlendNoColorWrite.RenderTarget[0].RenderTargetWriteMask = 0;
+	
 
 	// --------------------------------------------------------------------------------------
 	// depth stencil states
@@ -230,9 +237,10 @@ void wakuwaku::GraphicsState::Initialize()
 	DepthStateDisabled.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
 	DepthStateDisabled.BackFace = DepthStateDisabled.FrontFace;
 
-	DepthStateDefault = DepthStateDisabled;
+	DepthStateDefault = {};
 	DepthStateDefault.DepthEnable = TRUE;
-	DepthStateDefault.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+	DepthStateDefault.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	DepthStateDefault.DepthFunc =  D3D12_COMPARISON_FUNC_GREATER_EQUAL;
 
 }
 namespace wakuwaku::PSOManager
@@ -248,16 +256,13 @@ void wakuwaku::PSOManager::Initialize()
 {
 	rs_present.Reset(1, 1);
 	CD3DX12_RASTERIZER_DESC s;
-//  rs_present[0].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 2);
-// 	rs_present[1].InitAsConstants(0, 6, D3D12_SHADER_VISIBILITY_ALL);
-// 	rs_present[2].InitAsConstants(0, 6, D3D12_SHADER_VISIBILITY_ALL);
 	rs_present[0].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
 	rs_present.InitStaticSampler(0, GraphicsState::SamplerLinearClampDesc);
 	rs_present.Finalize(L"present");
 
 	pso_blit.SetRootSignature(rs_present);
 	pso_blit.SetRasterizerState(GraphicsState::RasterizerDefault);
-	pso_blit.SetBlendState(GraphicsState::BlendDisable);
+	pso_blit.SetBlendState(GraphicsState::BlendTransparent);
 	pso_blit.SetDepthStencilState(GraphicsState::DepthStateDisabled);
 	pso_blit.SetSampleMask(0xFFFFFFFF);
 	pso_blit.SetInputLayout(0, nullptr);
@@ -270,14 +275,14 @@ void wakuwaku::PSOManager::Initialize()
 
 	rs_default.Reset(8, 1);
 	rs_default[0].InitAsConstantBuffer(0);
-	rs_default[1].InitAsConstantBuffer(1);
+	rs_default[1].InitAsConstants(1,1);
 	rs_default[2].InitAsBufferSRV(0);
 	rs_default[3].InitAsBufferSRV(1);
 	rs_default[4].InitAsBufferSRV(2);
 	rs_default[5].InitAsBufferSRV(3);
 	rs_default[6].InitAsBufferSRV(4);
-	rs_default[7].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 5,-1);
-	rs_default.InitStaticSampler(0, wakuwaku::GraphicsState::SamplerLinearClampDesc);
+	rs_default[7].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 5,255);
+	rs_default.InitStaticSampler(0, wakuwaku::GraphicsState::SamplerLinearWarpDesc);
 	rs_default.Finalize(L"default signature", D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	D3D12_INPUT_ELEMENT_DESC mInputLayout[] =
@@ -291,7 +296,7 @@ void wakuwaku::PSOManager::Initialize()
 	pso_default = GraphicsPSO(L"default");
 	pso_default.SetRootSignature(rs_default);
 	pso_default.SetRasterizerState(GraphicsState::RasterizerDefault);
-	pso_default.SetBlendState(GraphicsState::BlendDisable);
+	pso_default.SetBlendState(GraphicsState::BlendTransparent);
 	pso_default.SetDepthStencilState(GraphicsState::DepthStateDefault);
 	pso_default.SetSampleMask(0xFFFFFFFF);
 	pso_default.SetInputLayout(_countof(mInputLayout), mInputLayout);
@@ -307,9 +312,10 @@ int wakuwaku::NativeRenderer::AddTexture(int id, void* texture_hanle)
 	{
 		return 0; // exist
 	}
+	int texture_id = texture_map.size();
 	auto& h = texture_map[id];
 	
-	h.texture_id = texture_map.size();
+	h.texture_id = texture_id;
 	h.texture.Attach(static_cast<ID3D12Resource*>(texture_hanle));
 	return 1;
 }
@@ -321,7 +327,7 @@ int wakuwaku::NativeRenderer::AddMesh(int mesh_id, void* vertex_handle, int num_
 
 	Mesh mesh;
 	mesh.vectex_buffer.Attach(static_cast<ID3D12Resource*>(vertex_handle), num_vectex_elements);
-	mesh.index_buffer.Attach(static_cast<ID3D12Resource*>(vertex_handle), num_vectex_elements);
+	mesh.index_buffer.Attach(static_cast<ID3D12Resource*>(index_handlem), num_index_elements);
 
 	mesh.subMeshes.resize(subMesh_count);
 	for (size_t i = 0; i < subMesh_count; i++)
@@ -390,7 +396,7 @@ void wakuwaku::NativeRenderer::Render()
 		}
 		context.SetDynamicDescriptors(7, 0, texture_map.size(), handles.data());
 	}
-
+	context.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	for (int i = 0; i < instance_cpu_datas.size(); i++)
 	{
 		auto& ins = instance_cpu_datas[i];
@@ -401,32 +407,7 @@ void wakuwaku::NativeRenderer::Render()
 		context.SetConstants(1, i);
 		context.DrawIndexed(mesh.subMeshes[ins.subMesh_id].index_count, mesh.subMeshes[ins.subMesh_id].index_start, 0);
 	}
-	context.Finish(true);
-
-	// blit
-// 	if(texture_map.begin() != texture_map.end())
-// 	{
-// 		float colors[] = { 1.0,0,0,1 };
-// 		auto& tex = *texture_map.begin();
-// 		GraphicsContext& context = GraphicsContext::Begin(L"Blit");
-// 		context.SetRootSignature(PSOManager::rs_present);
-// 		context.SetPipelineState(PSOManager::pso_blit);
-// 
-// 		context.TransitionResource(tex.second.texture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-// 		context.SetDynamicDescriptor(0, 0, tex.second.texture.GetSRV());
-// 		context.TransitionResource(current_frame_buffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
-// 		context.SetRenderTarget(current_frame_buffer.GetRTV());
-// 		context.ClearColor(current_frame_buffer, colors);
-// 		context.SetViewportAndScissor(0, 0, scene_width, scene_height);
-// 		context.Draw(3);
-// 		context.TransitionResource(current_frame_buffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-// 		context.Finish();
-// 	}
-// 	else
-// 	{
-// 		;
-// 	}
-
+	context.Finish();
 }
 
 void wakuwaku::NativeRenderer::OnSize(int width, int height, int buffer_count, DXGI_FORMAT format)
@@ -494,7 +475,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API AddMaterial(int id, in
 		return 1; // existed 
 
 	int id_in_vector = g_native_renderer->materials.size();
-	g_native_renderer->materials.emplace_back(albedo_tex_id);
+	g_native_renderer->materials.emplace_back(g_native_renderer->texture_map[albedo_tex_id].texture_id);
 
 	g_native_renderer->material_map[id] = id_in_vector;
 	return 0;

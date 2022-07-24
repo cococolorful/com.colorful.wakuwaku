@@ -28,7 +28,14 @@ struct Camera
     {
         return pos_world;
     }
-
+    float4x4 GetView()
+    {
+        return view_matrix;
+    }
+    float4x4 GetProj()
+    {
+        return proj_matrix;
+    }
     float4x4 CameraGetViewProj()
     {
         return view_proj_matrix;
